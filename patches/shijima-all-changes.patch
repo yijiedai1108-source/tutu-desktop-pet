@@ -67,7 +67,7 @@ index 2115764..8496db9 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..2fe299c 100644
+index 69f6778..89fbea9 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,6 +17,343 @@
@@ -441,7 +441,7 @@ index 69f6778..2fe299c 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1146,309 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1146,300 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -703,11 +703,8 @@ index 69f6778..2fe299c 100644
 +    auto state = hungerState();
 +    bool wantPudding = state == HungerState::Hungry;
 +    if (wantPudding && !m_wasHungry) {
-+        // 剛餓哭：從已解鎖菜單抽一道想吃的
++        // 剛餓哭：從已解鎖菜單抽一道想吃的（泡泡圖案會直接顯示）
 +        m_craving = QRandomGenerator::global()->bounded(unlockedFoods());
-+        static_cast<SpeechBubble *>(m_speechBubble)->say(
-+            QStringLiteral("肚子餓…想吃%1")
-+                .arg(foodLabel(m_craving)), 6000);
 +    }
 +    m_wasHungry = wantPudding;
 +    bool wantWater = m_thirstSeconds >= 45 * 60 && m_waterMlToday < 2000;
@@ -741,17 +738,11 @@ index 69f6778..2fe299c 100644
 +    if (now - m_lastCryMs >= interval) {
 +        m_lastCryMs = now;
 +        triggerCry(state == HungerState::Hungry);
-+        if (state == HungerState::Hungry
-+            && QRandomGenerator::global()->bounded(3) == 0)
-+        {
-+            static_cast<SpeechBubble *>(m_speechBubble)->say(
-+                QStringLiteral("想吃%1…").arg(foodLabel(m_craving)), 4000);
-+        }
 +    }
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1474,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1465,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -762,7 +753,7 @@ index 69f6778..2fe299c 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1488,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1479,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
