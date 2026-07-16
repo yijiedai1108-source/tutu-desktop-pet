@@ -38,7 +38,7 @@ index 2115764..6f44c19 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..9f53bc0 100644
+index 69f6778..f8ca799 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,6 +17,7 @@
@@ -90,10 +90,10 @@ index 69f6778..9f53bc0 100644
 +    m_hungerSeconds = 0;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
 +    if (widget != nullptr) {
-+        // 慶祝：追著滑鼠跑；沒有這個行為就退回一般跑步
-+        try { widget->mascot().next_behavior("ChaseMouse"); }
++        // 慶祝：先播開心表情（瞇眼＋愛心），沒有就退回追滑鼠
++        try { widget->mascot().next_behavior("Happy"); }
 +        catch (...) {
-+            try { widget->mascot().next_behavior("RunAlongWorkAreaFloor"); }
++            try { widget->mascot().next_behavior("ChaseMouse"); }
 +            catch (...) {}
 +        }
 +    }
