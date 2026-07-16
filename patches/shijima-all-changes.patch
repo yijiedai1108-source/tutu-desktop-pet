@@ -38,18 +38,93 @@ index 2115764..6f44c19 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..f8ca799 100644
+index 69f6778..7b7236f 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,7 @@
+@@ -17,6 +17,82 @@
  // 
  
  #include "ShijimaManager.hpp"
 +#include <QDateTime>
++#include <QPainter>
++#include <QMouseEvent>
++#include <algorithm>
++
++namespace {
++// 哭哭時跟著兔兔的「布丁對話框」：點布丁＝餵食
++class PuddingBubble : public QWidget {
++public:
++    ShijimaWidget *target = nullptr;
++    PuddingBubble(): QWidget(nullptr) {
++        setAttribute(Qt::WA_TranslucentBackground);
++        setAttribute(Qt::WA_NoSystemBackground);
++        setAttribute(Qt::WA_ShowWithoutActivating);
++        Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint
++            | Qt::WindowDoesNotAcceptFocus | Qt::NoDropShadowWindowHint;
++        #if defined(__APPLE__)
++        flags |= Qt::Window;
++        #else
++        flags |= Qt::Tool;
++        #endif
++        setWindowFlags(flags);
++        setFixedSize(60, 66);
++        setCursor(Qt::PointingHandCursor);
++        startTimer(80);
++    }
++protected:
++    void timerEvent(QTimerEvent *) override {
++        if (!isVisible()) {
++            return;
++        }
++        auto &list = ShijimaManager::defaultManager()->mascots();
++        if (list.empty()) {
++            hide();
++            return;
++        }
++        auto w = list.front();
++        target = w;
++        move(w->x() + w->width() / 2 - width() / 2, w->y() - height() + 10);
++    }
++    void mousePressEvent(QMouseEvent *) override {
++        ShijimaManager::defaultManager()->feed(target);
++    }
++    void paintEvent(QPaintEvent *) override {
++        QPainter p(this);
++        p.setRenderHint(QPainter::Antialiasing);
++        QColor line(0x59, 0x50, 0x4A);
++        // 泡泡（先畫尾巴再蓋圓角矩形，接縫藏在矩形下）
++        p.setPen(QPen(line, 2.4));
++        p.setBrush(Qt::white);
++        QPolygonF tail;
++        tail << QPointF(22, 44) << QPointF(38, 44) << QPointF(30, 62);
++        p.drawPolygon(tail);
++        p.drawRoundedRect(QRectF(2.5, 2.5, 55, 46), 13, 13);
++        // 布丁
++        QPolygonF body;
++        body << QPointF(19, 17) << QPointF(41, 17) << QPointF(46, 37) << QPointF(14, 37);
++        p.setPen(Qt::NoPen);
++        p.setBrush(QColor(0xFF, 0xE0, 0x82));
++        p.drawPolygon(body);
++        QPolygonF cap;
++        cap << QPointF(19, 17) << QPointF(41, 17) << QPointF(43, 25.5) << QPointF(17, 25.5);
++        p.setBrush(QColor(0xA6, 0x6E, 0x3D));
++        p.drawPolygon(cap);
++        for (auto fx : { 22.0, 30.0, 38.0 }) {
++            p.drawEllipse(QPointF(fx, 25.5), 2.0, 2.0);
++        }
++        p.setPen(QPen(line, 2.2));
++        p.setBrush(Qt::NoBrush);
++        p.drawPolygon(body);
++        p.setPen(Qt::NoPen);
++        p.setBrush(QColor(0xFF, 0xF8, 0xE1));
++        p.drawEllipse(QRectF(20, 28, 4.5, 7));
++    }
++};
++}
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +753,13 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +828,14 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -60,10 +135,11 @@ index 69f6778..f8ca799 100644
 +    }
 +    m_hungerSeconds = m_settings.value("hunger/seconds", 0.0).toDouble();
 +    m_hungerTickTimer = startTimer(5000);
++    m_puddingBubble = new PuddingBubble();
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +797,60 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +873,75 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -89,12 +165,22 @@ index 69f6778..f8ca799 100644
 +void ShijimaManager::feed(ShijimaWidget *widget) {
 +    m_hungerSeconds = 0;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
++    if (m_puddingBubble != nullptr) {
++        m_puddingBubble->hide();
++    }
++    if (widget != nullptr && std::find(m_mascots.begin(), m_mascots.end(),
++            widget) == m_mascots.end()) {
++        widget = nullptr;
++    }
 +    if (widget != nullptr) {
-+        // 慶祝：先播開心表情（瞇眼＋愛心），沒有就退回追滑鼠
-+        try { widget->mascot().next_behavior("Happy"); }
++        // 吃布丁 → 開心（素材沒有對應行為時逐層退回）
++        try { widget->mascot().next_behavior("Eat"); }
 +        catch (...) {
-+            try { widget->mascot().next_behavior("ChaseMouse"); }
-+            catch (...) {}
++            try { widget->mascot().next_behavior("Happy"); }
++            catch (...) {
++                try { widget->mascot().next_behavior("ChaseMouse"); }
++                catch (...) {}
++            }
 +        }
 +    }
 +}
@@ -111,6 +197,11 @@ index 69f6778..f8ca799 100644
 +    m_hungerSeconds += 5.0 * m_hungerScale;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
 +    auto state = hungerState();
++    bool wantBubble = state == HungerState::Hungry && !m_mascots.empty()
++        && !windowedMode();
++    if (wantBubble != m_puddingBubble->isVisible()) {
++        m_puddingBubble->setVisible(wantBubble);
++    }
 +    if (state == HungerState::Full || m_mascots.empty()) {
 +        return;
 +    }
@@ -124,7 +215,7 @@ index 69f6778..f8ca799 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +876,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +967,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -135,7 +226,7 @@ index 69f6778..f8ca799 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +890,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +981,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -145,7 +236,7 @@ index 69f6778..f8ca799 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..6a1e02c 100644
+index 3fc6de4..631dbcf 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -62,6 +62,10 @@ public:
@@ -168,11 +259,12 @@ index 3fc6de4..6a1e02c 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +111,10 @@ private:
+@@ -105,6 +111,11 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
 +    int m_hungerTickTimer = -1;
++    QWidget *m_puddingBubble = nullptr;
 +    double m_hungerSeconds = 0;
 +    double m_hungerScale = 1.0;
 +    qint64 m_lastCryMs = 0;
