@@ -66,7 +66,7 @@ index ad712f5..54194f2 100644
  
  }
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..ed063ae 100644
+index 2115764..4056090 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
 @@ -19,12 +19,47 @@
@@ -117,7 +117,7 @@ index 2115764..ed063ae 100644
      // Behaviors menu   
      {
          std::vector<std::string> behaviors;
-@@ -44,6 +79,12 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+@@ -44,6 +79,20 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
          }
      }
  
@@ -127,11 +127,19 @@ index 2115764..ed063ae 100644
 +        ShijimaManager::defaultManager()->startCelebration();
 +    });
 +
++    // 兔兔叫聲開關（吶喊/下班配音；開會時可整批靜音）
++    action = addAction(QString::fromUtf8("🔊 兔兔叫聲"));
++    action->setCheckable(true);
++    action->setChecked(ShijimaManager::defaultManager()->soundEnabled());
++    connect(action, &QAction::triggered, [](bool checked){
++        ShijimaManager::defaultManager()->setSoundEnabled(checked);
++    });
++
      // Show manager
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..86b8bf3 100644
+index 69f6778..646c8c0 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -480,15 +488,16 @@ index 69f6778..86b8bf3 100644
  #include <exception>
  #include <filesystem>
  #include <iostream>
-@@ -34,6 +372,7 @@
+@@ -34,6 +372,8 @@
  #include <QFile>
  #include <QDesktopServices>
  #include <QScreen>
 +#include <QSystemTrayIcon>
++#include <QDir>
  #include <QRandomGenerator>
  #include "PlatformWidget.hpp"
  #include "ShijimaLicensesDialog.hpp"
-@@ -752,6 +1091,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +1092,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -515,7 +524,7 @@ index 69f6778..86b8bf3 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1148,350 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1149,385 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -685,6 +694,33 @@ index 69f6778..86b8bf3 100644
 +#endif
 +}
 +
++// 兔兔叫聲：從已載入素材包的 sound/ 資料夾找 WAV 播放（QSoundEffect 不吃 mp3）。
++// 右鍵選單「🔊 兔兔叫聲」可整批靜音（sound/enabled）。
++void ShijimaManager::playVoice(QString const& name) {
++    if (!soundEnabled()) {
++        return;
++    }
++    m_voice.searchPaths.clear();
++    for (auto data : m_loadedMascots) {
++        QDir dir { data->imgRoot() };
++        if (dir.exists() && dir.cdUp() && dir.cd("sound")) {
++            m_voice.searchPaths.push_back(dir.path());
++        }
++    }
++    m_voice.play(name);
++}
++
++bool ShijimaManager::soundEnabled() {
++    return m_settings.value("sound/enabled", true).toBool();
++}
++
++void ShijimaManager::setSoundEnabled(bool enabled) {
++    m_settings.setValue("sound/enabled", enabled);
++    if (!enabled) {
++        m_voice.stop();
++    }
++}
++
 +void ShijimaManager::hungerTick() {
 +    m_hungerSeconds += 5.0 * m_hungerScale;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
@@ -721,9 +757,7 @@ index 69f6778..86b8bf3 100644
 +        && m_lastTickTime < endTime && nowTime >= endTime)
 +    {
 +        notify(QString::fromUtf8("該下班了！辛苦一天了 🎉"));
-+        static_cast<SpeechBubble *>(m_speechBubble)->say(
-+            QString::fromUtf8("下班了！🎉"), 8000);
-+        m_celebrateUntilMs = QDateTime::currentMSecsSinceEpoch() + 20000;
++        startCelebration();
 +    }
 +    m_lastTickTime = nowTime;
 +
@@ -784,20 +818,30 @@ index 69f6778..86b8bf3 100644
 +    if (!m_mascots.empty() && !windowedMode() && !m_puddingBubble->isVisible()
 +        && QRandomGenerator::global()->bounded(shoutOdds) == 0)
 +    {
-+        static const char *shouts[] = {
-+            "ヤハ！", "ウラ！", "ウラヤハ！！", "ウラウラ！"
++        // 叫聲對應：ヤハ→短促「呀哈」、ウラ 系→「哼!嗚啦~呀哈呀哈」、其餘/撒嬌→「哈咿呀哈」
++        static const struct { const char *text; const char *voice; } shouts[] = {
++            { "ヤハ！",       "yaha.wav" },
++            { "ウラ！",       "ura-yahayaha.wav" },
++            { "ウラヤハ！！", "haiyaha.wav" },
++            { "ウラウラ！",   "ura-yahayaha.wav" },
 +        };
-+        static const char *fondShouts[] = {
-+            "うらうら〜❤️", "ヤハ〜❤️"
++        static const struct { const char *text; const char *voice; } fondShouts[] = {
++            { "うらうら〜❤️", "haiyaha.wav" },
++            { "ヤハ〜❤️",     "haiyaha.wav" },
 +        };
-+        QString text;
++        QString text, voice;
 +        if (affectionLevel() >= 3 && QRandomGenerator::global()->bounded(4) == 0) {
-+            text = QString::fromUtf8(fondShouts[QRandomGenerator::global()->bounded(2)]);
++            auto &shout = fondShouts[QRandomGenerator::global()->bounded(2)];
++            text = QString::fromUtf8(shout.text);
++            voice = shout.voice;
 +        }
 +        else {
-+            text = QString::fromUtf8(shouts[QRandomGenerator::global()->bounded(4)]);
++            auto &shout = shouts[QRandomGenerator::global()->bounded(4)];
++            text = QString::fromUtf8(shout.text);
++            voice = shout.voice;
 +        }
 +        static_cast<SpeechBubble *>(m_speechBubble)->say(text);
++        playVoice(voice);
 +    }
 +
 +    // Lv4+：偶爾想找你玩，追滑鼠（約 25 分鐘一次）
@@ -866,7 +910,7 @@ index 69f6778..86b8bf3 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1517,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1553,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -921,7 +965,7 @@ index 69f6778..86b8bf3 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,6 +1583,13 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,6 +1619,13 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -935,7 +979,7 @@ index 69f6778..86b8bf3 100644
      m_previousWindow = m_currentWindow;
  
      env->set_scale(1.0 / std::sqrt(m_userScale));
-@@ -1000,9 +1730,17 @@ void ShijimaManager::tick() {
+@@ -1000,9 +1766,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -954,7 +998,7 @@ index 69f6778..86b8bf3 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1076,6 +1814,15 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1850,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -965,16 +1009,25 @@ index 69f6778..86b8bf3 100644
 +        static_cast<SpeechBubble *>(m_speechBubble)->say(
 +            QString::fromUtf8("下班了！🎉"), 8000);
 +    }
++    playVoice("celebrate.wav");
 +}
 +
  ShijimaWidget *ShijimaManager::spawn(std::string const& name) {
      QScreen *screen = mascotScreen();
      updateEnvironment(screen);
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..af587a8 100644
+index 3fc6de4..d6dfa05 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
-@@ -28,6 +28,7 @@
+@@ -20,6 +20,7 @@
+ 
+ #include <QMainWindow>
+ #include <QString>
++#include "SoundEffectManager.hpp"
+ #include <shijima/mascot/manager.hpp>
+ #include <shijima/mascot/factory.hpp>
+ #include <vector>
+@@ -28,6 +29,7 @@
  #include <QListWidget>
  #include <QSettings>
  #include <QScreen>
@@ -982,15 +1035,17 @@ index 3fc6de4..af587a8 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -50,6 +51,7 @@ public:
+@@ -50,6 +52,9 @@ public:
      void updateEnvironment(QScreen *);
      QString const& mascotsPath();
      ShijimaWidget *spawn(std::string const& name);
 +    void startCelebration();
++    bool soundEnabled();
++    void setSoundEnabled(bool enabled);
      void killAll();
      void killAll(QString const& name);
      void killAllButOne(ShijimaWidget *widget);
-@@ -62,6 +64,19 @@ public:
+@@ -62,6 +67,19 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -1010,17 +1065,18 @@ index 3fc6de4..af587a8 100644
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +111,9 @@ private:
+@@ -96,6 +114,10 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
 +    void hungerTick();
 +    void triggerCry(bool all);
 +    void notify(QString const& message);
++    void playVoice(QString const& name);
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +123,23 @@ private:
+@@ -105,6 +127,24 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -1028,6 +1084,7 @@ index 3fc6de4..af587a8 100644
 +    QWidget *m_puddingBubble = nullptr;
 +    QWidget *m_speechBubble = nullptr;
 +    class QSystemTrayIcon *m_trayIcon = nullptr;
++    SoundEffectManager m_voice;
 +    double m_hungerSeconds = 0;
 +    double m_thirstSeconds = 0;
 +    int m_waterMlToday = 0;
