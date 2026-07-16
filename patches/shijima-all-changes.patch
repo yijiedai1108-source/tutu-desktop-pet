@@ -44,10 +44,10 @@ index 2115764..7bb7435 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..64c8bb3 100644
+index 69f6778..3031189 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,113 @@
+@@ -17,6 +17,137 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -68,8 +68,15 @@ index 69f6778..64c8bb3 100644
 +            update();
 +        }
 +    }
++    void setProgress(double progress) {
++        if (m_progress != progress) {
++            m_progress = progress;
++            update();
++        }
++    }
 +private:
 +    int m_mode = 0; // 0 布丁、1 水杯
++    double m_progress = 0; // 今日飲水達成率 0~1
 +public:
 +    PuddingBubble(): QWidget(nullptr) {
 +        setAttribute(Qt::WA_TranslucentBackground);
@@ -121,19 +128,36 @@ index 69f6778..64c8bb3 100644
 +        p.drawPolygon(tail);
 +        p.drawRoundedRect(QRectF(2.5, 2.5, 55, 46), 13, 13);
 +        if (m_mode == 1) {
-+            // 水杯
++            // 水杯：水位 = 今日達成率
++            double topY = 13, botY = 33;
++            double topW = 17, botW = 13;
++            QPointF c(26, 0);
 +            QPolygonF cup;
-+            cup << QPointF(21, 14) << QPointF(39, 14) << QPointF(36.5, 39) << QPointF(23.5, 39);
++            cup << QPointF(c.x()-topW/2, topY) << QPointF(c.x()+topW/2, topY)
++                << QPointF(c.x()+botW/2, botY) << QPointF(c.x()-botW/2, botY);
 +            p.setPen(QPen(line, 2.2));
 +            p.setBrush(Qt::white);
 +            p.drawPolygon(cup);
++            double lv = m_progress < 0.08 ? 0.08 : (m_progress > 1 ? 1 : m_progress);
++            double wy = botY - (botY - topY - 1.5) * lv;
++            double t = (wy - topY) / (botY - topY);
++            double sw = topW + (botW - topW) * t;
 +            QPolygonF water;
-+            water << QPointF(22.4, 21) << QPointF(37.6, 21) << QPointF(36.2, 38) << QPointF(23.8, 38);
++            water << QPointF(c.x()-sw/2+1, wy) << QPointF(c.x()+sw/2-1, wy)
++                << QPointF(c.x()+botW/2-1, botY-1) << QPointF(c.x()-botW/2+1, botY-1);
 +            p.setPen(Qt::NoPen);
 +            p.setBrush(QColor(0x96, 0xCD, 0xF5));
 +            p.drawPolygon(water);
 +            p.setBrush(QColor(0xFF, 0xF8, 0xE1));
-+            p.drawEllipse(QRectF(25, 18, 3.5, 14));
++            p.drawEllipse(QRectF(c.x()-5, topY + 3, 3, botY - topY - 7));
++            // 達成率
++            QFont f = p.font();
++            f.setPixelSize(13);
++            f.setBold(true);
++            p.setFont(f);
++            p.setPen(QPen(line, 1));
++            p.drawText(QRectF(0, 34, 60, 13), Qt::AlignCenter,
++                QString::number((int)(m_progress * 100)) + "%");
 +            return;
 +        }
 +        // 布丁
@@ -161,7 +185,7 @@ index 69f6778..64c8bb3 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +859,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +883,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -179,7 +203,7 @@ index 69f6778..64c8bb3 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +907,123 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +931,126 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -247,10 +271,12 @@ index 69f6778..64c8bb3 100644
 +}
 +
 +QString ShijimaManager::waterStatusText() const {
++    int percent = (int)(m_waterMlToday / 2000.0 * 100);
 +    if (m_waterMlToday >= 2000) {
 +        return QStringLiteral("💧 今日 %1 ml，達標 ✅").arg(m_waterMlToday);
 +    }
-+    return QStringLiteral("💧 今日 %1 / 2000 ml").arg(m_waterMlToday);
++    return QStringLiteral("💧 今日 %1 / 2000 ml（%2%）")
++        .arg(m_waterMlToday).arg(percent);
 +}
 +
 +void ShijimaManager::triggerCry(bool all) {
@@ -286,6 +312,7 @@ index 69f6778..64c8bb3 100644
 +        && !windowedMode();
 +    if (wantBubble) {
 +        bubble->setMode(wantPudding ? 0 : 1);
++        bubble->setProgress(m_waterMlToday / 2000.0);
 +    }
 +    if (wantBubble != bubble->isVisible()) {
 +        bubble->setVisible(wantBubble);
@@ -303,7 +330,7 @@ index 69f6778..64c8bb3 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1049,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1076,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -314,7 +341,7 @@ index 69f6778..64c8bb3 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1063,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1090,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
