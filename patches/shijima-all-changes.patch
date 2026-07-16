@@ -139,7 +139,7 @@ index 2115764..4056090 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..646c8c0 100644
+index 69f6778..3050472 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -524,7 +524,7 @@ index 69f6778..646c8c0 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1149,385 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1149,389 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -815,6 +815,10 @@ index 69f6778..646c8c0 100644
 +
 +    // ヤハ彩蛋：隨機喊一聲，好感度越高越常跟你說話（Lv1 約 18 分鐘、Lv5 約 7.5 分鐘一次）
 +    int shoutOdds = 240 - affectionLevel() * 30;
++    // 測試模式：SHIJIMA_TEST_SHOUT=1 讓吶喊約 15 秒一次，方便驗證泡泡文字與叫聲的對應
++    if (qEnvironmentVariableIsSet("SHIJIMA_TEST_SHOUT")) {
++        shoutOdds = 3;
++    }
 +    if (!m_mascots.empty() && !windowedMode() && !m_puddingBubble->isVisible()
 +        && QRandomGenerator::global()->bounded(shoutOdds) == 0)
 +    {
@@ -910,7 +914,7 @@ index 69f6778..646c8c0 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1553,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1557,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -965,7 +969,7 @@ index 69f6778..646c8c0 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,6 +1619,13 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,6 +1623,13 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -979,7 +983,7 @@ index 69f6778..646c8c0 100644
      m_previousWindow = m_currentWindow;
  
      env->set_scale(1.0 / std::sqrt(m_userScale));
-@@ -1000,9 +1766,17 @@ void ShijimaManager::tick() {
+@@ -1000,9 +1770,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -998,7 +1002,7 @@ index 69f6778..646c8c0 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1076,6 +1850,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1854,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  

@@ -53,6 +53,13 @@
   （久坐、下班、肚子餓/喝水）直接呼叫 `osascript`，Windows 上會靜默失敗。抽成 `notify(message)`：
   macOS 維持 osascript 通知中心；其他平台 lazy 建一個 `QSystemTrayIcon`（🐰 圖示）用
   `showMessage()`——Windows 10/11 會顯示原生 toast。
+- 兔兔叫聲（2026-07-16 加）：`ShijimaManager::playVoice(name)` 重用引擎 `SoundEffectManager`，
+  從**已載入素材包的 `sound/` 資料夾**找 WAV 播（`QSoundEffect` 不吃 mp3；素材放
+  `packs/usagi-shimeji/sound/`，匯入時 libshimejifinder 原生會把 sound/*.wav 解進 `<名>.mascot/sound/`）。
+  - 對應：吶喊泡泡 ヤハ→`yaha.wav`、ウラ系→`ura-yahayaha.wav`、ウラヤハ/撒嬌❤️→`haiyaha.wav`；
+    下班狂奔開場（自動+手動，統一走 `startCelebration()`）→`celebrate.wav`。
+  - 右鍵選單「🔊 兔兔叫聲」開關 = QSettings `sound/enabled`（預設開）。
+  - 測試鉤子：`SHIJIMA_TEST_SHOUT=1` 讓吶喊約 15 秒一次（平常十幾分鐘），驗證泡泡字↔叫聲對應用。
 - 自動跨螢幕：**嘗試過但已還原**。做法是「相鄰螢幕側打通邊界 + 非拖曳時 `screenAt` 切換環境」，
   但在「上下堆疊且偏移」的雙螢幕上，接縫 y=0 同屬兩螢幕會造成反覆切換/全體變慢，且爬牆跨接不順。
   目前維持原生的**拖曳跨螢幕**（把兔兔拖到另一個螢幕即可）。
