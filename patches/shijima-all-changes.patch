@@ -56,15 +56,16 @@ index 2115764..1290b4e 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..fe7fb6d 100644
+index 69f6778..ca4b811 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,149 @@
+@@ -17,6 +17,150 @@
  // 
  
  #include "ShijimaManager.hpp"
 +#include <QDateTime>
 +#include <QDate>
++#include <QTime>
 +#include <QPainter>
 +#include <QProcess>
 +#include <QMouseEvent>
@@ -209,7 +210,7 @@ index 69f6778..fe7fb6d 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +895,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +896,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -227,7 +228,7 @@ index 69f6778..fe7fb6d 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +943,136 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +944,166 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -328,6 +329,36 @@ index 69f6778..fe7fb6d 100644
 +        m_settings.setValue("water/thirstSeconds", m_thirstSeconds);
 +    }
 +
++    // 久坐提醒：每 50 分鐘伸展一下（計時不跨重啟——重開機＝有起來走動）
++    m_sitSeconds += 5.0 * m_hungerScale;
++    if (m_sitSeconds >= 50 * 60) {
++        m_sitSeconds = 0;
++        for (auto mascot : m_mascots) {
++            try { mascot->mascot().next_behavior("Stretch"); }
++            catch (...) {}
++        }
++        QProcess::startDetached("osascript", { "-e",
++            QStringLiteral("display notification \"坐好久了，站起來動一動吧 🧘\" "
++                "with title \"兔兔\"") });
++    }
++
++    // 下班提醒：跨過下班時間那一刻提醒一次（預設 18:00，QSettings workday/end 可改）
++    QTime endTime = QTime::fromString(
++        m_settings.value("workday/end", "18:00").toString(), "HH:mm");
++    QTime nowTime = QTime::currentTime();
++    if (endTime.isValid() && m_lastTickTime.isValid()
++        && m_lastTickTime < endTime && nowTime >= endTime)
++    {
++        QProcess::startDetached("osascript", { "-e",
++            QStringLiteral("display notification \"該下班了！辛苦一天了 🎉\" "
++                "with title \"兔兔\"") });
++        if (!m_mascots.empty()) {
++            try { m_mascots.front()->mascot().next_behavior("Happy"); }
++            catch (...) {}
++        }
++    }
++    m_lastTickTime = nowTime;
++
 +    auto state = hungerState();
 +    bool wantPudding = state == HungerState::Hungry;
 +    bool wantWater = m_thirstSeconds >= 45 * 60 && m_waterMlToday < 2000;
@@ -364,7 +395,7 @@ index 69f6778..fe7fb6d 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1098,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1129,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -375,7 +406,7 @@ index 69f6778..fe7fb6d 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1112,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1143,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -385,10 +416,18 @@ index 69f6778..fe7fb6d 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..7dd965b 100644
+index 3fc6de4..504cd1c 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
-@@ -62,6 +62,12 @@ public:
+@@ -28,6 +28,7 @@
+ #include <QListWidget>
+ #include <QSettings>
+ #include <QScreen>
++#include <QTime>
+ #include "PlatformWidget.hpp"
+ #include "MascotData.hpp"
+ #include <set>
+@@ -62,6 +63,12 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -401,7 +440,7 @@ index 3fc6de4..7dd965b 100644
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +102,8 @@ private:
+@@ -96,6 +103,8 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -410,7 +449,7 @@ index 3fc6de4..7dd965b 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +113,14 @@ private:
+@@ -105,6 +114,16 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -421,6 +460,8 @@ index 3fc6de4..7dd965b 100644
 +    int m_waterMlToday = 0;
 +    QString m_waterDate;
 +    double m_hungerScale = 1.0;
++    double m_sitSeconds = 0;
++    QTime m_lastTickTime;
 +    qint64 m_lastCryMs = 0;
      bool m_allowClose = false;
      bool m_firstShow = true;
