@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>吉伊卡哇桌寵 · 姿勢一覽表</title>
+<style>
+  :root {
+    --ink: #18181B;
+    --muted: #475569;
+    --bg: #FAFAFA;
+    --card: #FFFFFF;
+    --tile: #F1EDE6;
+    --border: #E4E4E7;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Inter", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.6;
+    padding: 48px 32px 64px;
+  }
+  header { max-width: 1080px; margin: 0 auto 12px; }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: 0.01em; }
+  .sub { font-size: 16px; color: var(--muted); margin-top: 6px; max-width: 40em; }
+  .grid {
+    max-width: 1080px;
+    margin: 28px auto 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 12px 12px 14px;
+    box-shadow: 0 1px 2px rgba(24,24,27,.04);
+  }
+  .stage {
+    background: var(--tile);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1;
+  }
+  .stage svg { width: 86%; height: 86%; }
+  .name { font-size: 15px; font-weight: 600; margin-top: 10px; }
+  .name .num { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .desc { font-size: 13px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<header>
+  <h1>吉伊卡哇桌寵 · 姿勢一覽表 v1</h1>
+  <p class="sub">14 個基礎姿勢（量產時展開為 46 張差分）。過稿重點：臉、身形比例、腮紅位置。牆面／天花板的灰條只是示意，不會出現在成品裡。</p>
+</header>
+<div class="grid" id="grid"></div>
+
+<script>
+const OUT = '#59504A';      // 描邊
+const SKIN = '#FFFFFF';     // 身體
+const BLUSH = '#F9C4CE';    // 腮紅
+const MOUTH = '#8C4A44';    // 口腔
+const TEAR = '#8FC8EF';     // 眼淚
+const PROP = '#CFC9BE';     // 示意用牆/天花板
+
+// 四肢：外描邊＋白填色的膠囊
+function limb(x1, y1, x2, y2, w = 9) {
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${OUT}" stroke-width="${w + 5}" stroke-linecap="round"/>` +
+         `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${SKIN}" stroke-width="${w}" stroke-linecap="round"/>`;
+}
+
+// 耳朵（畫在身體後面）
+function ears(dy = 0) {
+  return `
+    <g transform="translate(0 ${dy})">
+      <ellipse cx="45" cy="26" rx="9" ry="12" transform="rotate(-18 45 26)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.5"/>
+      <ellipse cx="83" cy="26" rx="9" ry="12" transform="rotate(18 83 26)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.5"/>
+    </g>`;
+}
+
+// 身體（含頭，一體成形的圓潤蛋形）
+function body() {
+  return `<path d="M64,26 C46,26 34,40 33,58 C32,70 34,82 40,92 C46,100 54,104 64,104 C74,104 82,100 88,92 C94,82 96,70 95,58 C94,40 82,26 64,26 Z"
+    fill="${SKIN}" stroke="${OUT}" stroke-width="2.5"/>`;
+}
+
+// 表情
+function face(kind) {
+  const blush = `<ellipse cx="42" cy="69" rx="6.5" ry="4.5" fill="${BLUSH}"/><ellipse cx="86" cy="69" rx="6.5" ry="4.5" fill="${BLUSH}"/>`;
+  const dotEyes = `<circle cx="50" cy="60" r="3.6" fill="${OUT}"/><circle cx="78" cy="60" r="3.6" fill="${OUT}"/>`;
+  const wMouth = `<path d="M58,72 Q61,75.5 64,72 Q67,75.5 70,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
+  switch (kind) {
+    case 'normal':
+      return blush + dotEyes + wMouth;
+    case 'happy': // 瞇眼笑（捧臉用）
+      return blush +
+        `<path d="M45,60 Q50,55 55,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` +
+        `<path d="M73,60 Q78,55 83,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` + wMouth;
+    case 'surprised': // 嚇（被抓）
+      return blush +
+        `<circle cx="50" cy="59" r="5.5" fill="#FFF" stroke="${OUT}" stroke-width="2.2"/><circle cx="78" cy="59" r="5.5" fill="#FFF" stroke="${OUT}" stroke-width="2.2"/>` +
+        `<circle cx="50" cy="59" r="2" fill="${OUT}"/><circle cx="78" cy="59" r="2" fill="${OUT}"/>` +
+        `<ellipse cx="64" cy="74" rx="4.5" ry="6" fill="${MOUTH}" stroke="${OUT}" stroke-width="2"/>`;
+    case 'cry': // 淚眼（掉落）
+      return blush + dotEyes +
+        `<path d="M56,72 Q60,78 64,72 Q68,78 72,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>` +
+        `<path d="M46,64 q-2,5 0,8 q3,3 5,-1 q1,-4 -5,-7 Z" fill="${TEAR}"/>` +
+        `<path d="M82,64 q2,5 0,8 q-3,3 -5,-1 q-1,-4 5,-7 Z" fill="${TEAR}"/>`;
+    case 'squish': // >< （彈地、趴平）
+      return blush +
+        `<path d="M46,57 l8,3 l-8,3" fill="none" stroke="${OUT}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<path d="M82,57 l-8,3 l8,3" fill="none" stroke="${OUT}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<path d="M58,72 Q64,76 70,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
+    case 'sleep':
+      return blush +
+        `<path d="M45,60 Q50,64 55,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` +
+        `<path d="M73,60 Q78,64 83,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` +
+        `<path d="M60,72 Q64,74.5 68,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
+  }
+}
+
+// 組角色：limbs 分 back（畫在身體前、表情後）；transform 套整體
+function chara({ faceKind = 'normal', arms = '', legs = '', transform = '', extra = '', earsDy = 0 } = {}) {
+  return `<g transform="${transform}">${ears(earsDy)}${legs}${body()}${arms}${face(faceKind)}${extra}</g>`;
+}
+
+const stdLegs = limb(52, 100, 52, 112) + limb(76, 100, 76, 112);
+const stdArms = limb(38, 78, 32, 92) + limb(90, 78, 96, 92);
+
+const poses = [
+  { name: '站立', desc: '預設待機，微垂手', svg:
+    chara({ arms: stdArms, legs: stdLegs }) },
+
+  { name: '走路 A', desc: '左腳前、右手前擺', svg:
+    chara({ arms: limb(38, 78, 28, 88) + limb(90, 78, 98, 94), legs: limb(50, 100, 44, 112) + limb(78, 100, 82, 112) }) },
+
+  { name: '走路 B', desc: '換腳，與 A 交替', svg:
+    chara({ arms: limb(38, 78, 30, 94) + limb(90, 78, 100, 86), legs: limb(52, 100, 58, 112) + limb(76, 100, 70, 112) }) },
+
+  { name: '坐下', desc: '腿朝前，手放身側', svg:
+    chara({ transform: 'translate(0 8)', arms: limb(38, 80, 34, 94) + limb(90, 80, 94, 94), legs: limb(50, 100, 42, 108) + limb(78, 100, 86, 108) }) },
+
+  { name: '坐下・捧臉', desc: '發呆差分，瞇眼', svg:
+    chara({ transform: 'translate(0 8)', faceKind: 'happy', arms: limb(40, 84, 36, 66) + limb(88, 84, 92, 66), legs: limb(50, 100, 42, 108) + limb(78, 100, 86, 108) }) },
+
+  { name: '趴平', desc: '整隻拍在地上', svg:
+    chara({ transform: 'translate(0 38) scale(1.12 0.62)', faceKind: 'squish', arms: limb(34, 74, 18, 80) + limb(94, 74, 110, 80), legs: limb(52, 100, 46, 110) + limb(76, 100, 82, 110) }) },
+
+  { name: '爬牆 A', desc: '雙手攀牆（灰條＝牆）', svg:
+    `<rect x="8" y="0" width="10" height="128" fill="${PROP}"/>` +
+    chara({ transform: 'translate(-14 0) rotate(-10 64 64)', arms: limb(42, 72, 32, 48) + limb(44, 88, 34, 92), legs: limb(52, 100, 44, 112) + limb(74, 100, 70, 114) }) },
+
+  { name: '爬牆 B', desc: '換手，與 A 交替', svg:
+    `<rect x="8" y="0" width="10" height="128" fill="${PROP}"/>` +
+    chara({ transform: 'translate(-14 0) rotate(-10 64 64)', arms: limb(42, 72, 32, 88) + limb(44, 60, 34, 40), legs: limb(52, 100, 46, 114) + limb(74, 100, 68, 112) }) },
+
+  { name: '爬天花板 A', desc: '倒吊爬行（灰條＝天花板）', svg:
+    `<rect x="0" y="6" width="128" height="10" fill="${PROP}"/>` +
+    chara({ transform: 'translate(0 -32) rotate(180 64 64)', arms: limb(38, 78, 28, 94) + limb(90, 78, 100, 94), legs: limb(50, 100, 42, 112) + limb(78, 100, 86, 112) }) },
+
+  { name: '爬天花板 B', desc: '換手前進', svg:
+    `<rect x="0" y="6" width="128" height="10" fill="${PROP}"/>` +
+    chara({ transform: 'translate(0 -32) rotate(180 64 64)', arms: limb(38, 78, 26, 86) + limb(90, 78, 102, 100), legs: limb(50, 100, 44, 114) + limb(78, 100, 84, 110) }) },
+
+  { name: '被抓住', desc: '拖曳中，手腳亂揮＋嚇', svg:
+    chara({ faceKind: 'surprised', transform: 'translate(0 -2)', arms: limb(38, 74, 22, 62) + limb(90, 74, 106, 62), legs: limb(50, 100, 40, 114) + limb(78, 100, 88, 114),
+      extra: `<path d="M20,40 q-6,8 0,16" fill="none" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><path d="M108,40 q6,8 0,16" fill="none" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` }) },
+
+  { name: '掉落', desc: '淚眼＋哇的嘴', svg:
+    `<line x1="24" y1="6" x2="24" y2="20" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><line x1="64" y1="2" x2="64" y2="14" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><line x1="104" y1="6" x2="104" y2="20" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` +
+    chara({ faceKind: 'cry', transform: 'translate(0 6) rotate(-14 64 64)', arms: limb(38, 74, 24, 60) + limb(90, 74, 104, 60), legs: limb(50, 100, 42, 114) + limb(78, 100, 86, 114) }) },
+
+  { name: '彈地', desc: '落地壓扁一瞬間', svg:
+    `<line x1="12" y1="102" x2="2" y2="96" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><line x1="116" y1="102" x2="126" y2="96" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` +
+    chara({ faceKind: 'squish', transform: 'translate(0 34) scale(1.14 0.68)', arms: limb(36, 78, 24, 90) + limb(92, 78, 104, 90), legs: limb(52, 100, 46, 108) + limb(76, 100, 82, 108) }) },
+
+  { name: '睡覺', desc: '側躺＋Zzz', svg:
+    chara({ faceKind: 'sleep', transform: 'translate(6 30) rotate(78 64 64)', arms: limb(42, 82, 34, 94) + limb(86, 82, 90, 96), legs: limb(52, 100, 48, 112) + limb(76, 100, 80, 112) }) +
+    `<text x="96" y="34" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="${OUT}">Z</text>` +
+    `<text x="108" y="24" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="${OUT}">z</text>` },
+];
+
+document.getElementById('grid').innerHTML = poses.map((p, i) => `
+  <div class="card">
+    <div class="stage"><svg viewBox="0 0 128 128" role="img" aria-label="${p.name}">${p.svg}</svg></div>
+    <div class="name"><span class="num">${String(i + 1).padStart(2, '0')}</span>${p.name}</div>
+    <div class="desc">${p.desc}</div>
+  </div>`).join('');
+</script>
+</body>
+</html>
