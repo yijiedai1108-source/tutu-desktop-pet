@@ -52,8 +52,7 @@ jobs:
           cd shijima
           docker run -e CONFIG=release -e CMAKE_POLICY_VERSION_MINIMUM=3.5 \
             --rm -v "$(pwd)":/work shijima-qt-dev bash -c \
-            'mingw64-make -j$(nproc)'
-          cp -r licenses publish/Windows/release/
+            'mingw64-make -j$(nproc) && cp -r licenses publish/Windows/release/'
 
       - name: Bundle pack and instructions
         run: |
