@@ -67,10 +67,10 @@ index 2115764..8496db9 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..808604d 100644
+index 69f6778..297b696 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,243 @@
+@@ -17,6 +17,248 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -286,7 +286,12 @@ index 69f6778..808604d 100644
 +            return;
 +        }
 +        auto w = list.front();
-+        move(w->x() + w->width() / 2 - width() / 2, w->y() - height() + 12);
++        int x = w->x() + w->width() / 2 - width() / 2;
++        auto pb = ShijimaManager::defaultManager()->puddingBubble();
++        if (pb != nullptr && pb->isVisible()) {
++            x += 54;   // 讓位給布丁/水杯泡泡
++        }
++        move(x, w->y() - height() + 12);
 +    }
 +    void mousePressEvent(QMouseEvent *) override {
 +        hide();
@@ -314,7 +319,7 @@ index 69f6778..808604d 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +989,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +994,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -341,7 +346,7 @@ index 69f6778..808604d 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1046,287 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1051,308 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -358,7 +363,8 @@ index 69f6778..808604d 100644
 +
 +QString ShijimaManager::hungerStatusText() const {
 +    switch (hungerState()) {
-+        case HungerState::Hungry: return QStringLiteral("😭 哭哭中…快餵我");
++        case HungerState::Hungry:
++            return QStringLiteral("😭 哭哭中…想吃%1").arg(foodLabel(m_craving));
 +        case HungerState::Peckish: return QStringLiteral("🍞 有點餓了");
 +        default: return QStringLiteral("😊 吃飽了");
 +    }
@@ -378,10 +384,16 @@ index 69f6778..808604d 100644
 +
 +void ShijimaManager::feed(ShijimaWidget *widget, int food) {
 +    food = std::clamp(food, 0, foodCount() - 1);
++    bool matchedCraving = hungerState() == HungerState::Hungry
++        && food == m_craving;
 +    m_hungerSeconds = 0;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
 +    m_neglectSeconds = 0;
-+    addAffection(10 + 2 * food);   // 越高級的食物加越多
++    addAffection(10 + 2 * food + (matchedCraving ? 8 : 0));
++    if (matchedCraving) {
++        static_cast<SpeechBubble *>(m_speechBubble)->say(
++            QStringLiteral("就是這個！❤️"), 5000);
++    }
 +    if (m_puddingBubble != nullptr) {
 +        m_puddingBubble->hide();
 +    }
@@ -595,6 +607,14 @@ index 69f6778..808604d 100644
 +
 +    auto state = hungerState();
 +    bool wantPudding = state == HungerState::Hungry;
++    if (wantPudding && !m_wasHungry) {
++        // 剛餓哭：從已解鎖菜單抽一道想吃的
++        m_craving = QRandomGenerator::global()->bounded(unlockedFoods());
++        static_cast<SpeechBubble *>(m_speechBubble)->say(
++            QStringLiteral("肚子餓…想吃%1")
++                .arg(foodLabel(m_craving)), 6000);
++    }
++    m_wasHungry = wantPudding;
 +    bool wantWater = m_thirstSeconds >= 45 * 60 && m_waterMlToday < 2000;
 +    auto bubble = static_cast<PuddingBubble *>(m_puddingBubble);
 +    bool wantBubble = (wantPudding || wantWater) && !m_mascots.empty()
@@ -625,11 +645,17 @@ index 69f6778..808604d 100644
 +    if (now - m_lastCryMs >= interval) {
 +        m_lastCryMs = now;
 +        triggerCry(state == HungerState::Hungry);
++        if (state == HungerState::Hungry
++            && QRandomGenerator::global()->bounded(3) == 0)
++        {
++            static_cast<SpeechBubble *>(m_speechBubble)->say(
++                QStringLiteral("想吃%1…").arg(foodLabel(m_craving)), 4000);
++        }
 +    }
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1352,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1378,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -640,7 +666,7 @@ index 69f6778..808604d 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1366,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1392,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -650,7 +676,7 @@ index 69f6778..808604d 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..f96e12b 100644
+index 3fc6de4..ffc59ca 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -28,6 +28,7 @@
@@ -661,7 +687,7 @@ index 3fc6de4..f96e12b 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -62,6 +63,18 @@ public:
+@@ -62,6 +63,19 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -676,11 +702,12 @@ index 3fc6de4..f96e12b 100644
 +    static int foodCount();
 +    static QString foodLabel(int food);
 +    int unlockedFoods() const;
++    QWidget *puddingBubble() const { return m_puddingBubble; }
 +    void drink(ShijimaWidget *widget, int ml = 250);
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +109,8 @@ private:
+@@ -96,6 +110,8 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -689,7 +716,7 @@ index 3fc6de4..f96e12b 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +120,20 @@ private:
+@@ -105,6 +121,22 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -705,6 +732,8 @@ index 3fc6de4..f96e12b 100644
 +    int m_affection = 0;
 +    double m_neglectSeconds = 0;
 +    qint64 m_celebrateUntilMs = 0;
++    int m_craving = 0;
++    bool m_wasHungry = false;
 +    QTime m_lastTickTime;
 +    qint64 m_lastCryMs = 0;
      bool m_allowClose = false;
