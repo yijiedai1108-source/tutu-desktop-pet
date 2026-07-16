@@ -76,7 +76,13 @@
   Windows 不需要遮罩/點擊穿透 patch（`useWindowMasks()` 回 false，Qt layered window 原生穿透）；
   地板 = 工作列上緣（跨平台 `availableGeometry` 算的）。設定存 registry
   （`HKCU\Software\pixelomer\Shijima-Qt` 一帶），一般人不用碰——速度預設已是 2.5。
-- 打包：cp Shijima-Qt.app 骨架 + binary → `macdeployqt` → `codesign --force --deep -s -`
+- 打包：cp Shijima-Qt.app 骨架 + binary → `macdeployqt` → `codesign --force --deep -s tutu-dev`
+  - ⚠️ **一定用 `tutu-dev` 簽，不要 ad-hoc（`-s -`）**：macOS 的 TCC（輔助使用等權限）認簽章身分，
+    ad-hoc 每次重建指紋都變 → 權限失效、每次啟動都重新要求授權。`tutu-dev` 是本機自簽憑證
+    （在使用者 login keychain，2026-07-17 建，效期 10 年），身分固定、授權一次永久有效。
+    憑證遺失時重建：openssl 產 codeSigning EKU 自簽憑證 → p12（OpenSSL 3 要 `-legacy`）→
+    `security import -A`（免逐次確認）→ `security add-trusted-cert -p codeSign`（信任步驟需使用者親自跑）
+    → `tccutil reset Accessibility com.pixelomer.ShijimaQt` 清舊授權重給。
   - ⚠️ Makefile 的 `macapp` 目標把 macdeployqt 寫死成 MacPorts 路徑
     (`/opt/local/libexec/qt6/bin/macdeployqt`)，Homebrew 環境會失敗（binary 本身已編好）。
     Homebrew 用 `/opt/homebrew/bin/macdeployqt`，或沿用既有已 deploy 的 .app 骨架、只換 binary：
