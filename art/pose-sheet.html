@@ -54,132 +54,130 @@
 </head>
 <body>
 <header>
-  <h1>吉伊卡哇桌寵 · 姿勢一覽表 v1</h1>
-  <p class="sub">14 個基礎姿勢（量產時展開為 46 張差分）。過稿重點：臉、身形比例、腮紅位置。牆面／天花板的灰條只是示意，不會出現在成品裡。</p>
+  <h1>吉伊卡哇桌寵 · 姿勢一覽表 v2</h1>
+  <p class="sub">v2 重畫比例：圓球身形、大眼低位、大腮紅、小耳短肢。灰條／速度線只是示意，不會出現在成品裡。</p>
 </header>
 <div class="grid" id="grid"></div>
 
 <script>
 const OUT = '#59504A';      // 描邊
 const SKIN = '#FFFFFF';     // 身體
-const BLUSH = '#F9C4CE';    // 腮紅
-const MOUTH = '#8C4A44';    // 口腔
+const BLUSH = '#F5A8B8';    // 腮紅
+const MOUTH = '#D96A79';    // 口腔
 const TEAR = '#8FC8EF';     // 眼淚
 const PROP = '#CFC9BE';     // 示意用牆/天花板
 
-// 四肢：外描邊＋白填色的膠囊
-function limb(x1, y1, x2, y2, w = 9) {
-  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${OUT}" stroke-width="${w + 5}" stroke-linecap="round"/>` +
+// 四肢：外描邊＋白填色的膠囊（短肢）
+function limb(x1, y1, x2, y2, w = 8) {
+  return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${OUT}" stroke-width="${w + 4.5}" stroke-linecap="round"/>` +
          `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${SKIN}" stroke-width="${w}" stroke-linecap="round"/>`;
 }
 
-// 耳朵（畫在身體後面）
-function ears(dy = 0) {
+// 耳朵：小圓耳，貼著頭頂弧線（畫在身體後面）
+function ears() {
   return `
-    <g transform="translate(0 ${dy})">
-      <ellipse cx="45" cy="26" rx="9" ry="12" transform="rotate(-18 45 26)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.5"/>
-      <ellipse cx="83" cy="26" rx="9" ry="12" transform="rotate(18 83 26)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.5"/>
-    </g>`;
+    <ellipse cx="45" cy="30" rx="7" ry="9" transform="rotate(-14 45 30)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.4"/>
+    <ellipse cx="83" cy="30" rx="7" ry="9" transform="rotate(14 83 30)" fill="${SKIN}" stroke="${OUT}" stroke-width="2.4"/>`;
 }
 
-// 身體（含頭，一體成形的圓潤蛋形）
+// 身體：接近正圓的球形，臉即全身
 function body() {
-  return `<path d="M64,26 C46,26 34,40 33,58 C32,70 34,82 40,92 C46,100 54,104 64,104 C74,104 82,100 88,92 C94,82 96,70 95,58 C94,40 82,26 64,26 Z"
-    fill="${SKIN}" stroke="${OUT}" stroke-width="2.5"/>`;
+  return `<path d="M64,32 C48,32 34,42 31,58 C29,68 30,82 36,92 C43,101 53,105 64,105 C75,105 85,101 92,92 C98,82 99,68 97,58 C94,42 80,32 64,32 Z"
+    fill="${SKIN}" stroke="${OUT}" stroke-width="2.4"/>`;
 }
 
-// 表情
+// 表情：大眼、低位、寬間距；大腮紅緊貼眼下外側
 function face(kind) {
-  const blush = `<ellipse cx="42" cy="69" rx="6.5" ry="4.5" fill="${BLUSH}"/><ellipse cx="86" cy="69" rx="6.5" ry="4.5" fill="${BLUSH}"/>`;
-  const dotEyes = `<circle cx="50" cy="60" r="3.6" fill="${OUT}"/><circle cx="78" cy="60" r="3.6" fill="${OUT}"/>`;
-  const wMouth = `<path d="M58,72 Q61,75.5 64,72 Q67,75.5 70,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
+  const blush = `<ellipse cx="40" cy="76" rx="7.5" ry="5" fill="${BLUSH}"/><ellipse cx="88" cy="76" rx="7.5" ry="5" fill="${BLUSH}"/>`;
+  const dotEyes = `<circle cx="48" cy="66" r="4.4" fill="${OUT}"/><circle cx="80" cy="66" r="4.4" fill="${OUT}"/>`;
+  const openMouth = `<path d="M60,74 Q64,80 68,74 Z" fill="${MOUTH}" stroke="${OUT}" stroke-width="1.8" stroke-linejoin="round"/>`;
   switch (kind) {
     case 'normal':
-      return blush + dotEyes + wMouth;
+      return blush + dotEyes + openMouth;
     case 'happy': // 瞇眼笑（捧臉用）
       return blush +
-        `<path d="M45,60 Q50,55 55,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` +
-        `<path d="M73,60 Q78,55 83,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` + wMouth;
+        `<path d="M43,66 Q48,61 53,66" fill="none" stroke="${OUT}" stroke-width="2.8" stroke-linecap="round"/>` +
+        `<path d="M75,66 Q80,61 85,66" fill="none" stroke="${OUT}" stroke-width="2.8" stroke-linecap="round"/>` + openMouth;
     case 'surprised': // 嚇（被抓）
       return blush +
-        `<circle cx="50" cy="59" r="5.5" fill="#FFF" stroke="${OUT}" stroke-width="2.2"/><circle cx="78" cy="59" r="5.5" fill="#FFF" stroke="${OUT}" stroke-width="2.2"/>` +
-        `<circle cx="50" cy="59" r="2" fill="${OUT}"/><circle cx="78" cy="59" r="2" fill="${OUT}"/>` +
-        `<ellipse cx="64" cy="74" rx="4.5" ry="6" fill="${MOUTH}" stroke="${OUT}" stroke-width="2"/>`;
+        `<circle cx="48" cy="65" r="5.5" fill="#FFF" stroke="${OUT}" stroke-width="2.2"/><circle cx="80" cy="65" r="5.5" fill="#FFF" stroke="${OUT}" stroke-width="2.2"/>` +
+        `<circle cx="48" cy="65" r="2" fill="${OUT}"/><circle cx="80" cy="65" r="2" fill="${OUT}"/>` +
+        `<ellipse cx="64" cy="78" rx="4.5" ry="5.5" fill="${MOUTH}" stroke="${OUT}" stroke-width="1.8"/>`;
     case 'cry': // 淚眼（掉落）
       return blush + dotEyes +
-        `<path d="M56,72 Q60,78 64,72 Q68,78 72,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>` +
-        `<path d="M46,64 q-2,5 0,8 q3,3 5,-1 q1,-4 -5,-7 Z" fill="${TEAR}"/>` +
-        `<path d="M82,64 q2,5 0,8 q-3,3 -5,-1 q-1,-4 5,-7 Z" fill="${TEAR}"/>`;
+        `<path d="M56,76 Q60,82 64,76 Q68,82 72,76" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>` +
+        `<path d="M41,70 q-2,5 0,8 q3,3 5,-1 q1,-4 -5,-7 Z" fill="${TEAR}"/>` +
+        `<path d="M87,70 q2,5 0,8 q-3,3 -5,-1 q-1,-4 5,-7 Z" fill="${TEAR}"/>`;
     case 'squish': // >< （彈地、趴平）
       return blush +
-        `<path d="M46,57 l8,3 l-8,3" fill="none" stroke="${OUT}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>` +
-        `<path d="M82,57 l-8,3 l8,3" fill="none" stroke="${OUT}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>` +
-        `<path d="M58,72 Q64,76 70,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
+        `<path d="M43,62 l9,4 l-9,4" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<path d="M85,62 l-9,4 l9,4" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>` +
+        `<path d="M58,76 Q64,80 70,76" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
     case 'sleep':
       return blush +
-        `<path d="M45,60 Q50,64 55,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` +
-        `<path d="M73,60 Q78,64 83,60" fill="none" stroke="${OUT}" stroke-width="2.6" stroke-linecap="round"/>` +
-        `<path d="M60,72 Q64,74.5 68,72" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
+        `<path d="M43,66 Q48,70 53,66" fill="none" stroke="${OUT}" stroke-width="2.8" stroke-linecap="round"/>` +
+        `<path d="M75,66 Q80,70 85,66" fill="none" stroke="${OUT}" stroke-width="2.8" stroke-linecap="round"/>` +
+        `<path d="M60,76 Q64,78.5 68,76" fill="none" stroke="${OUT}" stroke-width="2.2" stroke-linecap="round"/>`;
   }
 }
 
-// 組角色：limbs 分 back（畫在身體前、表情後）；transform 套整體
-function chara({ faceKind = 'normal', arms = '', legs = '', transform = '', extra = '', earsDy = 0 } = {}) {
-  return `<g transform="${transform}">${ears(earsDy)}${legs}${body()}${arms}${face(faceKind)}${extra}</g>`;
+// 組角色：legs 畫在身體後、arms 畫在身體前
+function chara({ faceKind = 'normal', arms = '', legs = '', transform = '', extra = '' } = {}) {
+  return `<g transform="${transform}">${ears()}${legs}${body()}${arms}${face(faceKind)}${extra}</g>`;
 }
 
-const stdLegs = limb(52, 100, 52, 112) + limb(76, 100, 76, 112);
-const stdArms = limb(38, 78, 32, 92) + limb(90, 78, 96, 92);
+const stdLegs = limb(52, 101, 52, 111) + limb(76, 101, 76, 111);
+const stdArms = limb(36, 84, 31, 94) + limb(92, 84, 97, 94);
 
 const poses = [
   { name: '站立', desc: '預設待機，微垂手', svg:
     chara({ arms: stdArms, legs: stdLegs }) },
 
   { name: '走路 A', desc: '左腳前、右手前擺', svg:
-    chara({ arms: limb(38, 78, 28, 88) + limb(90, 78, 98, 94), legs: limb(50, 100, 44, 112) + limb(78, 100, 82, 112) }) },
+    chara({ arms: limb(36, 84, 28, 90) + limb(92, 84, 99, 96), legs: limb(50, 101, 44, 111) + limb(78, 101, 82, 111) }) },
 
   { name: '走路 B', desc: '換腳，與 A 交替', svg:
-    chara({ arms: limb(38, 78, 30, 94) + limb(90, 78, 100, 86), legs: limb(52, 100, 58, 112) + limb(76, 100, 70, 112) }) },
+    chara({ arms: limb(36, 84, 29, 96) + limb(92, 84, 100, 88), legs: limb(52, 101, 58, 111) + limb(76, 101, 70, 111) }) },
 
   { name: '坐下', desc: '腿朝前，手放身側', svg:
-    chara({ transform: 'translate(0 8)', arms: limb(38, 80, 34, 94) + limb(90, 80, 94, 94), legs: limb(50, 100, 42, 108) + limb(78, 100, 86, 108) }) },
+    chara({ transform: 'translate(0 8)', arms: limb(36, 86, 33, 96) + limb(92, 86, 95, 96), legs: limb(50, 101, 42, 108) + limb(78, 101, 86, 108) }) },
 
   { name: '坐下・捧臉', desc: '發呆差分，瞇眼', svg:
-    chara({ transform: 'translate(0 8)', faceKind: 'happy', arms: limb(40, 84, 36, 66) + limb(88, 84, 92, 66), legs: limb(50, 100, 42, 108) + limb(78, 100, 86, 108) }) },
+    chara({ transform: 'translate(0 8)', faceKind: 'happy', arms: limb(38, 90, 33, 72) + limb(90, 90, 95, 72), legs: limb(50, 101, 42, 108) + limb(78, 101, 86, 108) }) },
 
   { name: '趴平', desc: '整隻拍在地上', svg:
-    chara({ transform: 'translate(0 38) scale(1.12 0.62)', faceKind: 'squish', arms: limb(34, 74, 18, 80) + limb(94, 74, 110, 80), legs: limb(52, 100, 46, 110) + limb(76, 100, 82, 110) }) },
+    chara({ transform: 'translate(0 34) scale(1.1 0.66)', faceKind: 'squish', arms: limb(33, 80, 18, 86) + limb(95, 80, 110, 86), legs: limb(52, 101, 46, 110) + limb(76, 101, 82, 110) }) },
 
   { name: '爬牆 A', desc: '雙手攀牆（灰條＝牆）', svg:
     `<rect x="8" y="0" width="10" height="128" fill="${PROP}"/>` +
-    chara({ transform: 'translate(-14 0) rotate(-10 64 64)', arms: limb(42, 72, 32, 48) + limb(44, 88, 34, 92), legs: limb(52, 100, 44, 112) + limb(74, 100, 70, 114) }) },
+    chara({ transform: 'translate(-12 0) rotate(-10 64 64)', arms: limb(40, 78, 31, 54) + limb(42, 92, 32, 96), legs: limb(52, 101, 44, 112) + limb(74, 101, 70, 113) }) },
 
   { name: '爬牆 B', desc: '換手，與 A 交替', svg:
     `<rect x="8" y="0" width="10" height="128" fill="${PROP}"/>` +
-    chara({ transform: 'translate(-14 0) rotate(-10 64 64)', arms: limb(42, 72, 32, 88) + limb(44, 60, 34, 40), legs: limb(52, 100, 46, 114) + limb(74, 100, 68, 112) }) },
+    chara({ transform: 'translate(-12 0) rotate(-10 64 64)', arms: limb(40, 78, 31, 92) + limb(42, 66, 32, 44), legs: limb(52, 101, 46, 113) + limb(74, 101, 68, 112) }) },
 
   { name: '爬天花板 A', desc: '倒吊爬行（灰條＝天花板）', svg:
     `<rect x="0" y="6" width="128" height="10" fill="${PROP}"/>` +
-    chara({ transform: 'translate(0 -32) rotate(180 64 64)', arms: limb(38, 78, 28, 94) + limb(90, 78, 100, 94), legs: limb(50, 100, 42, 112) + limb(78, 100, 86, 112) }) },
+    chara({ transform: 'translate(0 -32) rotate(180 64 64)', arms: limb(36, 84, 28, 96) + limb(92, 84, 100, 96), legs: limb(50, 101, 42, 111) + limb(78, 101, 86, 111) }) },
 
   { name: '爬天花板 B', desc: '換手前進', svg:
     `<rect x="0" y="6" width="128" height="10" fill="${PROP}"/>` +
-    chara({ transform: 'translate(0 -32) rotate(180 64 64)', arms: limb(38, 78, 26, 86) + limb(90, 78, 102, 100), legs: limb(50, 100, 44, 114) + limb(78, 100, 84, 110) }) },
+    chara({ transform: 'translate(0 -32) rotate(180 64 64)', arms: limb(36, 84, 26, 90) + limb(92, 84, 102, 100), legs: limb(50, 101, 44, 113) + limb(78, 101, 84, 109) }) },
 
   { name: '被抓住', desc: '拖曳中，手腳亂揮＋嚇', svg:
-    chara({ faceKind: 'surprised', transform: 'translate(0 -2)', arms: limb(38, 74, 22, 62) + limb(90, 74, 106, 62), legs: limb(50, 100, 40, 114) + limb(78, 100, 88, 114),
-      extra: `<path d="M20,40 q-6,8 0,16" fill="none" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><path d="M108,40 q6,8 0,16" fill="none" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` }) },
+    chara({ faceKind: 'surprised', transform: 'translate(0 -2)', arms: limb(36, 80, 22, 68) + limb(92, 80, 106, 68), legs: limb(50, 101, 40, 113) + limb(78, 101, 88, 113),
+      extra: `<path d="M20,44 q-6,8 0,16" fill="none" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><path d="M108,44 q6,8 0,16" fill="none" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` }) },
 
   { name: '掉落', desc: '淚眼＋哇的嘴', svg:
     `<line x1="24" y1="6" x2="24" y2="20" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><line x1="64" y1="2" x2="64" y2="14" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><line x1="104" y1="6" x2="104" y2="20" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` +
-    chara({ faceKind: 'cry', transform: 'translate(0 6) rotate(-14 64 64)', arms: limb(38, 74, 24, 60) + limb(90, 74, 104, 60), legs: limb(50, 100, 42, 114) + limb(78, 100, 86, 114) }) },
+    chara({ faceKind: 'cry', transform: 'translate(0 6) rotate(-14 64 64)', arms: limb(36, 80, 24, 66) + limb(92, 80, 104, 66), legs: limb(50, 101, 42, 113) + limb(78, 101, 86, 113) }) },
 
   { name: '彈地', desc: '落地壓扁一瞬間', svg:
     `<line x1="12" y1="102" x2="2" y2="96" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/><line x1="116" y1="102" x2="126" y2="96" stroke="${PROP}" stroke-width="3" stroke-linecap="round"/>` +
-    chara({ faceKind: 'squish', transform: 'translate(0 34) scale(1.14 0.68)', arms: limb(36, 78, 24, 90) + limb(92, 78, 104, 90), legs: limb(52, 100, 46, 108) + limb(76, 100, 82, 108) }) },
+    chara({ faceKind: 'squish', transform: 'translate(0 30) scale(1.12 0.7)', arms: limb(34, 84, 24, 94) + limb(94, 84, 104, 94), legs: limb(52, 101, 46, 109) + limb(76, 101, 82, 109) }) },
 
   { name: '睡覺', desc: '側躺＋Zzz', svg:
-    chara({ faceKind: 'sleep', transform: 'translate(6 30) rotate(78 64 64)', arms: limb(42, 82, 34, 94) + limb(86, 82, 90, 96), legs: limb(52, 100, 48, 112) + limb(76, 100, 80, 112) }) +
+    chara({ faceKind: 'sleep', transform: 'translate(6 26) rotate(78 64 64)', arms: limb(40, 88, 34, 98) + limb(88, 88, 92, 100), legs: limb(52, 101, 48, 111) + limb(76, 101, 80, 111) }) +
     `<text x="96" y="34" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="${OUT}">Z</text>` +
     `<text x="108" y="24" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="${OUT}">z</text>` },
 ];
