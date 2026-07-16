@@ -67,7 +67,7 @@ index 2115764..8496db9 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..9366190 100644
+index 69f6778..808604d 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,6 +17,243 @@
@@ -341,7 +341,7 @@ index 69f6778..9366190 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1046,274 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1046,287 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -531,6 +531,19 @@ index 69f6778..9366190 100644
 +        }
 +    }
 +
++    // 上班時間（平日 workday.start~end）：兔兔偶爾打電腦陪你工作（約 10 分鐘一次）
++    QTime workStart = QTime::fromString(
++        m_settings.value("workday/start", "09:00").toString(), "HH:mm");
++    bool workHours = QDate::currentDate().dayOfWeek() <= 5
++        && workStart.isValid() && endTime.isValid()
++        && nowTime >= workStart && nowTime < endTime;
++    if (workHours && !m_mascots.empty()
++        && QRandomGenerator::global()->bounded(120) == 0)
++    {
++        try { m_mascots.front()->mascot().next_behavior("Work"); }
++        catch (...) {}
++    }
++
 +    // ヤハ彩蛋：隨機喊一聲，好感度越高越常跟你說話（Lv1 約 18 分鐘、Lv5 約 7.5 分鐘一次）
 +    int shoutOdds = 240 - affectionLevel() * 30;
 +    if (!m_mascots.empty() && !windowedMode() && !m_puddingBubble->isVisible()
@@ -616,7 +629,7 @@ index 69f6778..9366190 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1339,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1352,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -627,7 +640,7 @@ index 69f6778..9366190 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1353,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1366,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
