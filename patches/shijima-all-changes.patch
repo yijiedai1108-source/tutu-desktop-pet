@@ -56,16 +56,17 @@ index 2115764..1290b4e 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..e9e9642 100644
+index 69f6778..fe7fb6d 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,148 @@
+@@ -17,6 +17,149 @@
  // 
  
  #include "ShijimaManager.hpp"
 +#include <QDateTime>
 +#include <QDate>
 +#include <QPainter>
++#include <QProcess>
 +#include <QMouseEvent>
 +#include <QMenu>
 +#include <algorithm>
@@ -208,7 +209,7 @@ index 69f6778..e9e9642 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +894,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +895,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -226,7 +227,7 @@ index 69f6778..e9e9642 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +942,126 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +943,136 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -338,6 +339,16 @@ index 69f6778..e9e9642 100644
 +        bubble->setProgress(m_waterMlToday / 2000.0);
 +    }
 +    if (wantBubble != bubble->isVisible()) {
++        if (wantBubble) {
++            // 同步發 macOS 通知（兔兔被視窗蓋住時也看得到）
++            QString msg = wantPudding
++                ? QStringLiteral("兔兔肚子餓哭哭中，點布丁餵牠 🍮")
++                : QStringLiteral("該喝水囉！今日達成 %1%")
++                    .arg((int)(m_waterMlToday / 2000.0 * 100));
++            QProcess::startDetached("osascript", { "-e",
++                QStringLiteral("display notification \"%1\" with title \"兔兔\"")
++                    .arg(msg) });
++        }
 +        bubble->setVisible(wantBubble);
 +    }
 +    if (state == HungerState::Full || m_mascots.empty()) {
@@ -353,7 +364,7 @@ index 69f6778..e9e9642 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1087,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1098,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -364,7 +375,7 @@ index 69f6778..e9e9642 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1101,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1112,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
