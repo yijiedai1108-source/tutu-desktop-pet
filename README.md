@@ -54,7 +54,7 @@
 | ❤️ 好感度 | 餵食/喝水/每日見面加分，冷落哭哭扣分；5 級稱號（陌生兔兔→有點熟了→朋友→麻吉→家人），解鎖越高級的食物（布丁→飯糰→郎拉麵→草莓蛋糕→布丁阿拉摩德）；Lv3+ 會撒嬌、Lv4+ 偶爾追滑鼠找你玩、Lv5 每天第一次見面會迎接你 |
 | ヤハ！ | 隨機冒出吶喊對話框（ヤハ！ウラ！…），好感度高會撒嬌 ❤️ |
 | 🔊 叫聲 | 吶喊泡泡會配烏薩奇本聲（ヤハ／嗚啦~呀哈呀哈／哈咿呀哈），下班狂奔有開場吶喊；右鍵「🔊 兔兔叫聲」可整批靜音 |
-| 🐇 增殖 | 兔兔偶爾會分裂或從螢幕邊拔出新兔兔（上限 50 隻），右鍵 → Dismiss all but one 可清場 |
+| 🐇 增殖 | 兔兔偶爾會分裂或從螢幕邊拔出新兔兔（**上限 20 隻**，額滿自動停止，螢幕閒置也不怕爆量；手動生成不受限），右鍵 → Dismiss all but one 可清場；完全不想生：管理視窗 Settings → Enable multiplication 取消勾選 |
 
 ## 右鍵選單（點兔兔）
 
@@ -78,6 +78,9 @@ defaults write com.pixelomer.Shijima-Qt "workday.start" -string "09:30"
 
 # 重設好感度 / 直接調分數（50=Lv2, 150=Lv3, 300=Lv4, 600=Lv5）
 defaults write com.pixelomer.Shijima-Qt "affection.points" -int 0
+
+# 繁殖上限（預設 20，0 = 不限；手動生成不受限）
+defaults write com.pixelomer.Shijima-Qt "mascot.maxCount" -int 20
 ```
 
 想快速體驗全部功能（時間加速 60 倍，2 小時變 2 分鐘）：

@@ -139,7 +139,7 @@ index 2115764..4056090 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..3050472 100644
+index 69f6778..6466f9c 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -1002,7 +1002,22 @@ index 69f6778..3050472 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1076,6 +1854,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1011,6 +1789,14 @@ void ShijimaManager::tick() {
+                 mascot.state->env = m_env[newScreen];
+             }
+         }
++        // 繁殖上限：額滿就拒絕繁殖請求（分裂/拔蘿蔔），螢幕閒置也不會爆量。
++        // 手動生成（雙擊清單/選單 Spawn）不受限。defaults "mascot.maxCount" 可調，0 = 不限。
++        if (breedRequest.available) {
++            int maxMascots = m_settings.value("mascot/maxCount", 20).toInt();
++            if (maxMascots > 0 && (int)m_mascots.size() >= maxMascots) {
++                breedRequest.available = false;
++            }
++        }
+         if (breedRequest.available) {
+             if (breedRequest.name == "") {
+                 breedRequest.name = shimeji->mascotName().toStdString();
+@@ -1076,6 +1862,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
