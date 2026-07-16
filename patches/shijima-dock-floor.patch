@@ -1,0 +1,15 @@
+diff --git a/ShijimaManager.cc b/ShijimaManager.cc
+index 69f6778..dc05f68 100644
+--- a/ShijimaManager.cc
++++ b/ShijimaManager.cc
+@@ -814,8 +814,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+         geometry = screen->geometry();
+         available = screen->availableGeometry();
+     }
+-    int taskbarHeight = available.bottom() - geometry.bottom();
+-    int statusBarHeight = geometry.top() - available.top();
++    int taskbarHeight = geometry.bottom() - available.bottom();
++    int statusBarHeight = available.top() - geometry.top();
+     if (taskbarHeight < 0) {
+         taskbarHeight = 0;
+     }
