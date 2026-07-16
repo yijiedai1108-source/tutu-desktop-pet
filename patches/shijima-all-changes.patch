@@ -15,10 +15,10 @@ index 5ca3ada..73aefc2 100644
  	path = cpp-httplib
  	url = https://github.com/yhirose/cpp-httplib
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..383c2bb 100644
+index 2115764..8496db9 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
-@@ -19,12 +19,38 @@
+@@ -19,12 +19,47 @@
  #include "ShijimaContextMenu.hpp"
  #include "ShijimaWidget.hpp"
  #include "ShijimaManager.hpp"
@@ -38,10 +38,19 @@ index 2115764..383c2bb 100644
 +        action->setEnabled(false);
 +        action = addAction(manager->affectionStatusText());
 +        action->setEnabled(false);
-+        action = addAction("餵食 🥕");
-+        connect(action, &QAction::triggered, [this](){
-+            ShijimaManager::defaultManager()->feed(shijimaParent());
-+        });
++        auto feedMenu = addMenu("餵食 🍮");
++        for (int i = 0; i < manager->unlockedFoods(); i++) {
++            action = feedMenu->addAction(ShijimaManager::foodLabel(i));
++            connect(action, &QAction::triggered, [this, i](){
++                ShijimaManager::defaultManager()->feed(shijimaParent(), i);
++            });
++        }
++        if (manager->unlockedFoods() < ShijimaManager::foodCount()) {
++            int next = manager->unlockedFoods();
++            action = feedMenu->addAction(QStringLiteral("Lv.%1 解鎖 %2")
++                .arg(next + 1).arg(ShijimaManager::foodLabel(next)));
++            action->setEnabled(false);
++        }
 +        auto waterMenu = addMenu("喝水 💧");
 +        for (auto opt : { std::pair<const char *, int>{"一小口 100 ml", 100},
 +                          {"一杯 250 ml", 250}, {"一瓶 500 ml", 500} }) {
@@ -58,10 +67,10 @@ index 2115764..383c2bb 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..2ee25f5 100644
+index 69f6778..10aa167 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,218 @@
+@@ -17,6 +17,234 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -127,21 +136,37 @@ index 69f6778..2ee25f5 100644
 +        move(w->x() + w->width() / 2 - width() / 2, w->y() - height() + 10);
 +    }
 +    void mousePressEvent(QMouseEvent *event) override {
++        auto manager = ShijimaManager::defaultManager();
 +        if (m_mode == 1) {
 +            QMenu menu;
-+            menu.addAction("一小口 100 ml", [this](){
-+                ShijimaManager::defaultManager()->drink(target, 100);
++            menu.addAction("一小口 100 ml", [this, manager](){
++                manager->drink(target, 100);
 +            });
-+            menu.addAction("一杯 250 ml", [this](){
-+                ShijimaManager::defaultManager()->drink(target, 250);
++            menu.addAction("一杯 250 ml", [this, manager](){
++                manager->drink(target, 250);
 +            });
-+            menu.addAction("一瓶 500 ml", [this](){
-+                ShijimaManager::defaultManager()->drink(target, 500);
++            menu.addAction("一瓶 500 ml", [this, manager](){
++                manager->drink(target, 500);
 +            });
 +            menu.exec(mapToGlobal(event->pos()));
 +        }
++        else if (manager->unlockedFoods() <= 1) {
++            manager->feed(target);
++        }
 +        else {
-+            ShijimaManager::defaultManager()->feed(target);
++            QMenu menu;
++            for (int i = 0; i < manager->unlockedFoods(); i++) {
++                menu.addAction(ShijimaManager::foodLabel(i), [this, manager, i](){
++                    manager->feed(target, i);
++                });
++            }
++            if (manager->unlockedFoods() < ShijimaManager::foodCount()) {
++                int next = manager->unlockedFoods();
++                auto locked = menu.addAction(QStringLiteral("Lv.%1 解鎖 %2")
++                    .arg(next + 1).arg(ShijimaManager::foodLabel(next)));
++                locked->setEnabled(false);
++            }
++            menu.exec(mapToGlobal(event->pos()));
 +        }
 +    }
 +    void paintEvent(QPaintEvent *) override {
@@ -280,7 +305,7 @@ index 69f6778..2ee25f5 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +964,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +980,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -307,7 +332,7 @@ index 69f6778..2ee25f5 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1021,223 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1037,267 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -330,11 +355,24 @@ index 69f6778..2ee25f5 100644
 +    }
 +}
 +
-+void ShijimaManager::feed(ShijimaWidget *widget) {
++namespace {
++struct FoodInfo { const char *label; const char *behavior; };
++// 索引 i 需要好感度 Lv.(i+1) 解鎖
++const FoodInfo FOOD_TABLE[] = {
++    { "布丁 🍮", "Eat" },
++    { "飯糰 🍙", "EatOnigiri" },
++    { "郎拉麵 🍜", "EatRamen" },
++    { "草莓蛋糕 🍰", "EatCake" },
++    { "布丁阿拉摩德 🍨", "EatALaMode" },
++};
++}
++
++void ShijimaManager::feed(ShijimaWidget *widget, int food) {
++    food = std::clamp(food, 0, foodCount() - 1);
 +    m_hungerSeconds = 0;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
 +    m_neglectSeconds = 0;
-+    addAffection(10);
++    addAffection(10 + 2 * food);   // 越高級的食物加越多
 +    if (m_puddingBubble != nullptr) {
 +        m_puddingBubble->hide();
 +    }
@@ -343,8 +381,8 @@ index 69f6778..2ee25f5 100644
 +        widget = nullptr;
 +    }
 +    if (widget != nullptr) {
-+        // 吃布丁 → 開心（素材沒有對應行為時逐層退回）
-+        try { widget->mascot().next_behavior("Eat"); }
++        // 吃對應食物 → 開心（素材沒有對應行為時逐層退回）
++        try { widget->mascot().next_behavior(FOOD_TABLE[food].behavior); }
 +        catch (...) {
 +            try { widget->mascot().next_behavior("Happy"); }
 +            catch (...) {
@@ -385,6 +423,18 @@ index 69f6778..2ee25f5 100644
 +    }
 +    return QStringLiteral("💧 今日 %1 / 2000 ml（%2%）")
 +        .arg(m_waterMlToday).arg(percent);
++}
++
++int ShijimaManager::foodCount() {
++    return 5;
++}
++
++QString ShijimaManager::foodLabel(int food) {
++    return QString::fromUtf8(FOOD_TABLE[food].label);
++}
++
++int ShijimaManager::unlockedFoods() const {
++    return std::min(affectionLevel(), foodCount());
 +}
 +
 +void ShijimaManager::addAffection(int delta) {
@@ -486,6 +536,25 @@ index 69f6778..2ee25f5 100644
 +        static_cast<SpeechBubble *>(m_speechBubble)->say(text);
 +    }
 +
++    // Lv4+：偶爾想找你玩，追滑鼠（約 25 分鐘一次）
++    if (affectionLevel() >= 4 && !m_mascots.empty()
++        && QRandomGenerator::global()->bounded(300) == 0)
++    {
++        try { m_mascots.front()->mascot().next_behavior("ChaseMouse"); }
++        catch (...) {}
++    }
++
++    // Lv5：每天第一次見面，開心迎接
++    if (affectionLevel() >= 5 && !m_mascots.empty()
++        && m_settings.value("affection/greetDate").toString() != today)
++    {
++        m_settings.setValue("affection/greetDate", today);
++        try { m_mascots.front()->mascot().next_behavior("Happy"); }
++        catch (...) {}
++        static_cast<SpeechBubble *>(m_speechBubble)->say(
++            QString::fromUtf8("ヤハ！"));
++    }
++
 +    // 冷落懲罰：放著哭哭不管，每 10 分鐘 -5
 +    if (hungerState() == HungerState::Hungry) {
 +        m_neglectSeconds += 5.0 * m_hungerScale;
@@ -531,7 +600,7 @@ index 69f6778..2ee25f5 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1263,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1323,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -542,7 +611,7 @@ index 69f6778..2ee25f5 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1277,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1337,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -552,7 +621,7 @@ index 69f6778..2ee25f5 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..f76159a 100644
+index 3fc6de4..a12569f 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -28,6 +28,7 @@
@@ -563,7 +632,7 @@ index 3fc6de4..f76159a 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -62,6 +63,15 @@ public:
+@@ -62,6 +63,18 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -574,12 +643,15 @@ index 3fc6de4..f76159a 100644
 +    QString affectionStatusText() const;
 +    int affectionLevel() const;
 +    void addAffection(int delta);
-+    void feed(ShijimaWidget *widget);
++    void feed(ShijimaWidget *widget, int food = 0);
++    static int foodCount();
++    static QString foodLabel(int food);
++    int unlockedFoods() const;
 +    void drink(ShijimaWidget *widget, int ml = 250);
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +106,8 @@ private:
+@@ -96,6 +109,8 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -588,7 +660,7 @@ index 3fc6de4..f76159a 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +117,19 @@ private:
+@@ -105,6 +120,19 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
