@@ -1,0 +1,46 @@
+# libshijima base commit: cdf1dc42405e065bdb0ac3fcf747e70d288d1551
+diff --git a/shijima/action/animation.cc b/shijima/action/animation.cc
+index b754c8d..5fa439b 100644
+--- a/shijima/action/animation.cc
++++ b/shijima/action/animation.cc
+@@ -65,8 +65,10 @@ bool animation::tick() {
+         return false;
+     }
+     auto velocity = get_velocity();
+-    mascot->anchor.x += dx(velocity.x);
+-    mascot->anchor.y += dy(velocity.y);
++    // 全方向套速度倍率（走/爬/跑一起變快）；動畫自然（步伐變大，不是幀播快）。
++    double sp = mascot->env->speed_mult;
++    mascot->anchor.x += dx(velocity.x) * sp;
++    mascot->anchor.y += dy(velocity.y) * sp;
+     mascot->active_frame = get_pose();
+     return true;
+ }
+diff --git a/shijima/action/fall.cc b/shijima/action/fall.cc
+index aa2acf6..95a94fc 100644
+--- a/shijima/action/fall.cc
++++ b/shijima/action/fall.cc
+@@ -64,8 +64,9 @@ bool fall::subtick(int idx) {
+ 
+     math::vec2 before = mascot->anchor;
+ 
+-    mascot->anchor.x += velocity.x / subtick_count;
+-    mascot->anchor.y += velocity.y / subtick_count;
++    double sp = mascot->env->speed_mult;   // 掉落也套倍率
++    mascot->anchor.x += velocity.x / subtick_count * sp;
++    mascot->anchor.y += velocity.y / subtick_count * sp;
+     
+     if (mascot->anchor.x > mascot->env->work_area.right) {
+         mascot->anchor.x = mascot->env->work_area.right;
+diff --git a/shijima/mascot/environment.hpp b/shijima/mascot/environment.hpp
+index e145f97..7a3a86a 100644
+--- a/shijima/mascot/environment.hpp
++++ b/shijima/mascot/environment.hpp
+@@ -206,6 +206,7 @@ public:
+     long mascot_count = 0;
+     bool sticky_ie = true;
+     int subtick_count = 1;
++    double speed_mult = 1.0;   // 移動速度倍率（走/爬/跑/掉，全方向）；動畫維持自然（步伐變大而非播快）
+ 
+     // [0.0, 1.0)
+     double random() {

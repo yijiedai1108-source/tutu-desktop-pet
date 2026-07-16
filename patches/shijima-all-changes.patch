@@ -14,8 +14,59 @@ index 5ca3ada..73aefc2 100644
  [submodule "cpp-httplib"]
  	path = cpp-httplib
  	url = https://github.com/yhirose/cpp-httplib
+diff --git a/Asset.cc b/Asset.cc
+index 40982f7..21f74aa 100644
+--- a/Asset.cc
++++ b/Asset.cc
+@@ -63,7 +63,7 @@ void Asset::setImage(QImage const& image) {
+     m_offset = rect;
+     m_image = image.copy(rect);
+     m_mirrored = m_image.mirrored(true, false);
+-#ifdef __linux__
++#if defined(__linux__) || defined(__APPLE__)
+     m_mask = QBitmap::fromImage(m_image.createAlphaMask());
+     m_mirroredMask = QBitmap::fromImage(m_mirrored.createAlphaMask());
+ #endif
+diff --git a/Asset.hpp b/Asset.hpp
+index d5a8d29..6ceee5a 100644
+--- a/Asset.hpp
++++ b/Asset.hpp
+@@ -30,7 +30,7 @@ private:
+     QSize m_originalSize;
+     QImage m_image;
+     QImage m_mirrored;
+-#ifdef __linux__
++#if defined(__linux__) || defined(__APPLE__)
+     QBitmap m_mask;
+     QBitmap m_mirroredMask;
+ #endif
+@@ -40,8 +40,8 @@ public:
+     QImage const& image(bool mirrored) const { 
+         return mirrored ? m_mirrored : m_image;
+     }
+-#ifdef __linux__
+-    QBitmap const& mask(bool mirrored) const { 
++#if defined(__linux__) || defined(__APPLE__)
++    QBitmap const& mask(bool mirrored) const {
+         return mirrored ? m_mirroredMask : m_mask;
+     }
+ #endif
+diff --git a/Platform/macOS/Platform.mm b/Platform/macOS/Platform.mm
+index ad712f5..54194f2 100644
+--- a/Platform/macOS/Platform.mm
++++ b/Platform/macOS/Platform.mm
+@@ -33,7 +33,8 @@ void showOnAllDesktops(QWidget *widget) {
+ }
+ 
+ bool useWindowMasks() {
+-    return false;
++    // per-pixel 遮罩：兔兔只有實際身體像素擋滑鼠，透明區可穿透（貼側邊選單也點得到）。
++    return true;
+ }
+ 
+ }
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..8496db9 100644
+index 2115764..ed063ae 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
 @@ -19,12 +19,47 @@
@@ -66,11 +117,24 @@ index 2115764..8496db9 100644
      // Behaviors menu   
      {
          std::vector<std::string> behaviors;
+@@ -44,6 +79,12 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+         }
+     }
+ 
++    // 下班狂奔（手動觸發 20 秒全場狂奔，方便隨時測試／炫耀）
++    action = addAction(QString::fromUtf8("🎉 下班狂奔（20 秒）"));
++    connect(action, &QAction::triggered, [](){
++        ShijimaManager::defaultManager()->startCelebration();
++    });
++
+     // Show manager
+     action = addAction("Show manager");
+     connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..515ef71 100644
+index 69f6778..894cba0 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,343 @@
+@@ -17,7 +17,345 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -412,9 +476,11 @@ index 69f6778..515ef71 100644
 +};
 +}
  #include <cmath>
++#include <cstdlib>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +1089,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+ #include <iostream>
+@@ -752,6 +1090,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -441,7 +507,7 @@ index 69f6778..515ef71 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1146,300 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1147,331 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -630,11 +696,42 @@ index 69f6778..515ef71 100644
 +    }
 +    m_lastTickTime = nowTime;
 +
-+    // 下班慶祝：20 秒內全場狂奔
-+    if (QDateTime::currentMSecsSinceEpoch() < m_celebrateUntilMs) {
-+        for (auto mascot : m_mascots) {
-+            try { mascot->mascot().next_behavior("RunAlongWorkAreaFloor"); }
-+            catch (...) {}
++    // 下班慶祝：20 秒內全場狂奔。每隔約 1.2~2.4 秒，幫每隻兔兔隨機切一個「激烈移動」行為，
++    // 讓全場跑上跑下亂竄。名字用引擎實際載入的英文行為名（見右鍵 Behaviors 選單那份清單）。
++    // 注意：跑/爬類多半是 hidden，所以這裡「不看 hidden」，改用明確白名單挑會動的——
++    // 否則抓非-hidden 會抽到 Eat/Drink/Sit（吃飯喝水坐著）。只挑「從地板就能起跳」的，
++    // 避免硬套需要先在牆/天花板上的行為而立刻掉下來。
++    static const char *const dashCandidates[] = {
++        "RunAlongWorkAreaFloor",       // 沿地板狂奔（左右來回）
++        "CrawlAlongWorkAreaFloor",     // 貼地快爬
++        "WalkAndGrabBottomLeftWall",   // 衝去左牆爬上去
++        "WalkAndGrabBottomRightWall",  // 衝去右牆爬上去
++    };
++    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
++    if (nowMs < m_celebrateUntilMs) {
++        static bool dashSeeded = false;
++        if (!dashSeeded) { std::srand((unsigned)nowMs); dashSeeded = true; }
++        static qint64 nextDashRerollMs = 0;
++        if (nowMs >= nextDashRerollMs) {
++            nextDashRerollMs = nowMs + 1200 + (std::rand() % 1200);  // 1.2~2.4s
++            for (auto mascot : m_mascots) {
++                try {
++                    // 只從「該兔兔實際擁有」的候選名裡挑，確保 find 一定找得到、不會丟例外
++                    auto flat = mascot->mascot()
++                        .initial_behavior_list().flatten_unconditional();
++                    std::vector<std::string> pool;
++                    for (auto name : dashCandidates) {
++                        for (auto &b : flat) {
++                            if (b->name == name) { pool.push_back(name); break; }
++                        }
++                    }
++                    if (!pool.empty()) {
++                        mascot->mascot().next_behavior(
++                            pool[std::rand() % pool.size()]);
++                    }
++                }
++                catch (...) {}
++            }
 +        }
 +    }
 +
@@ -742,7 +839,7 @@ index 69f6778..515ef71 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1465,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1497,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -753,17 +850,100 @@ index 69f6778..515ef71 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1479,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+     if (statusBarHeight < 0) {
+         statusBarHeight = 0;
+     }
++    // 左右牆內縮：避免兔兔走/爬到螢幕物理邊緣被裁切。只縮「外緣」——某側若有相鄰螢幕
++    // （可把兔兔拖過去），該側不縮，以免卡在螢幕接縫。可用 defaults 調 wall.leftMargin/rightMargin。
++    int leftMargin = m_settings.value("wall/leftMargin", 0).toInt();
++    int rightMargin = m_settings.value("wall/rightMargin", 0).toInt();
++    if (screen == nullptr) {
++        leftMargin = rightMargin = 0;
++    }
++    else {
++        for (auto other : QGuiApplication::screens()) {
++            if (other == screen) { continue; }
++            QRect og = other->geometry();
++            bool vOverlap = og.bottom() > geometry.top() && og.top() < geometry.bottom();
++            if (!vOverlap) { continue; }
++            int dl = og.right() - geometry.left();
++            if (dl >= -2 && dl <= 2) { leftMargin = 0; }
++            int dr = og.left() - geometry.right();
++            if (dr >= -2 && dr <= 2) { rightMargin = 0; }
++        }
++    }
++    double insetLeft = (double)geometry.left() + leftMargin;
++    double insetRight = (double)geometry.right() - rightMargin;
+     env->screen = { (double)geometry.top() + statusBarHeight,
+         (double)geometry.right(),
+         (double)geometry.bottom(),
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
-         (double)geometry.left(), (double)geometry.right() };
+-        (double)geometry.left(), (double)geometry.right() };
 -    env->work_area = { (double)geometry.top(),
+-        (double)geometry.right(),
++        insetLeft, insetRight };
 +    env->work_area = { (double)geometry.top() + statusBarHeight,
-         (double)geometry.right(),
++        insetRight,
          (double)geometry.bottom() - taskbarHeight,
-         (double)geometry.left() };
+-        (double)geometry.left() };
+-    env->ceiling = { (double)geometry.top(), (double)geometry.left(),
+-        (double)geometry.right() };
++        insetLeft };
++    env->ceiling = { (double)geometry.top(), insetLeft, insetRight };
+     if (!windowedMode() && m_currentWindow.available &&
+         std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
+     {
+@@ -860,6 +1563,12 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+     int x = cursor.x(), y = cursor.y();
+     env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
+     env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
++    // 移動速度倍率（走/爬/跑/掉，全方向）；動畫維持自然。
++    //   defaults write com.pixelomer.Shijima-Qt "mascot.speed" -float 2.5
++    double moveSp = m_settings.value("mascot/speed", 1.0).toDouble();
++    if (moveSp < 0.2) { moveSp = 0.2; }
++    if (moveSp > 3.5) { moveSp = 3.5; }   // 上限，太高會跨過邊界判定卡住
++    env->speed_mult = moveSp;
+     m_previousWindow = m_currentWindow;
+ 
+     env->set_scale(1.0 / std::sqrt(m_userScale));
+@@ -1000,9 +1709,17 @@ void ShijimaManager::tick() {
+             m_mascotsById.erase(mascotId);
+             continue;
+         }
+-        shimeji->tick();
++        // 保險：兔兔 tick 內若丟例外（例如 next_behavior 指到找不到的行為名，
++        // find 會丟 logic_error），在此攔下，避免整個 app abort。
++        try { shimeji->tick(); }
++        catch (std::exception const& ex) {
++            std::cerr << "mascot tick error: " << ex.what() << std::endl;
++        }
++        catch (...) {}
+         auto &mascot = shimeji->mascot();
+         auto &breedRequest = mascot.state->breed_request;
++        // 螢幕環境切換：不再只限拖曳——兔兔自己走/爬越界到另一個螢幕時也切換，
++        // 讓自動跨螢幕成立。anchor 落在螢幕空隙時 screenAt 回 nullptr，會被下面判斷擋掉、不亂切。
+         if (mascot.state->dragging && !windowedMode()) {
+             auto oldScreen = m_reverseEnv[mascot.state->env.get()];
+             auto newScreen = QGuiApplication::screenAt(QPoint {
+@@ -1076,6 +1793,15 @@ QScreen *ShijimaManager::mascotScreen() {
+     return screen;
+ }
+ 
++void ShijimaManager::startCelebration() {
++    // 手動觸發「下班狂奔」20 秒（右鍵選單用）。實際的狂奔邏輯在 tick 裡讀 m_celebrateUntilMs。
++    m_celebrateUntilMs = QDateTime::currentMSecsSinceEpoch() + 20000;
++    if (m_speechBubble != nullptr) {
++        static_cast<SpeechBubble *>(m_speechBubble)->say(
++            QString::fromUtf8("下班了！🎉"), 8000);
++    }
++}
++
+ ShijimaWidget *ShijimaManager::spawn(std::string const& name) {
+     QScreen *screen = mascotScreen();
+     updateEnvironment(screen);
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..ffc59ca 100644
+index 3fc6de4..cf263fb 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -28,6 +28,7 @@
@@ -774,7 +954,15 @@ index 3fc6de4..ffc59ca 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -62,6 +63,19 @@ public:
+@@ -50,6 +51,7 @@ public:
+     void updateEnvironment(QScreen *);
+     QString const& mascotsPath();
+     ShijimaWidget *spawn(std::string const& name);
++    void startCelebration();
+     void killAll();
+     void killAll(QString const& name);
+     void killAllButOne(ShijimaWidget *widget);
+@@ -62,6 +64,19 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -794,7 +982,7 @@ index 3fc6de4..ffc59ca 100644
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +110,8 @@ private:
+@@ -96,6 +111,8 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -803,7 +991,7 @@ index 3fc6de4..ffc59ca 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +121,22 @@ private:
+@@ -105,6 +122,22 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -826,3 +1014,99 @@ index 3fc6de4..ffc59ca 100644
      bool m_allowClose = false;
      bool m_firstShow = true;
      bool m_wasVisible = false;
+diff --git a/ShijimaWidget.cc b/ShijimaWidget.cc
+index 295a4e4..bf991c2 100644
+--- a/ShijimaWidget.cc
++++ b/ShijimaWidget.cc
+@@ -19,6 +19,7 @@
+ #include "ShijimaWidget.hpp"
+ #include <QWidget>
+ #include <QPainter>
++#include <QBitmap>
+ #include <QFile>
+ #include <QDir>
+ #include <QScreen>
+@@ -115,19 +116,31 @@ void ShijimaWidget::paintEvent(QPaintEvent *event) {
+     auto scaledSize = image.size() / m_drawScale;
+     QPainter painter(this);
+     painter.drawImage(QRect { m_drawOrigin, scaledSize }, image);
+-#ifdef __linux__
++#if defined(__linux__) || defined(__APPLE__)
+     if (Platform::useWindowMasks()) {
+-        m_windowMask = QBitmap::fromPixmap(asset.mask(isMirroredRender())
+-            .scaled(scaledSize));
+-        m_windowMask.translate(m_drawOrigin);
+-        auto bounding = m_windowMask.boundingRect();
+-        bounding.setTop(0);
+-        bounding.setLeft(0);
+-        if (bounding.width() > 0 && bounding.height() > 0) {
+-            setMask(m_windowMask);
+-        }
+-        else {
+-            setMask(QRect { m_windowWidth - 2, m_windowHeight - 2, 1, 1 });
++        bool mirror = isMirroredRender();
++        const void *assetPtr = (const void *)&asset;
++        // 只有在圖片幀/鏡像/位置/縮放真的改變時才重算並 setMask。
++        // 兔兔移動但同一張圖時直接跳過——省下 macOS 每幀重塑視窗的開銷（會拖慢）。
++        if (assetPtr != m_maskAsset || mirror != m_maskMirror
++            || m_drawOrigin != m_maskOrigin || m_drawScale != m_maskScale)
++        {
++            m_maskAsset = assetPtr;
++            m_maskMirror = mirror;
++            m_maskOrigin = m_drawOrigin;
++            m_maskScale = m_drawScale;
++            m_windowMask = QBitmap::fromPixmap(asset.mask(mirror)
++                .scaled(scaledSize));
++            m_windowMask.translate(m_drawOrigin);
++            auto bounding = m_windowMask.boundingRect();
++            bounding.setTop(0);
++            bounding.setLeft(0);
++            if (bounding.width() > 0 && bounding.height() > 0) {
++                setMask(m_windowMask);
++            }
++            else {
++                setMask(QRect { m_windowWidth - 2, m_windowHeight - 2, 1, 1 });
++            }
+         }
+     }
+ #endif
+@@ -179,12 +192,18 @@ bool ShijimaWidget::updateOffsets() {
+         - (int)env()->screen.left;
+     int winY = (int)m_mascot->state->anchor.y - m_anchorInWindow.y()
+         - (int)env()->screen.top;
++    // 只有「站/走在地板上」且非拖曳時，才把會超出螢幕的幀整個推回螢幕內
++    // （身體完整、邊緣抵住牆，而不是被螢幕邊切掉）。爬牆(在 work_area 牆上)與
++    // 天花板走原本邏輯——原本的往外偏移正是讓爬牆幀貼到真邊的關鍵，不能動。
++    // 拖曳時也維持原狀（跟游標、可移出邊緣去別的螢幕）。只影響水平方向。
++    bool pushInsideX = env()->floor.is_on(m_mascot->state->anchor)
++        && !m_mascot->state->dragging;
+     if (winX < 0) {
+-        drawOffset.setX(winX);
++        if (!pushInsideX) { drawOffset.setX(winX); }
+         winX = 0;
+     }
+     else if (winX + windowWidth > screenWidth) {
+-        drawOffset.setX(winX - screenWidth + windowWidth);
++        if (!pushInsideX) { drawOffset.setX(winX - screenWidth + windowWidth); }
+         winX = screenWidth - windowWidth;
+     }
+     if (winY < 0) {
+diff --git a/ShijimaWidget.hpp b/ShijimaWidget.hpp
+index f0a2985..c7a47c0 100644
+--- a/ShijimaWidget.hpp
++++ b/ShijimaWidget.hpp
+@@ -78,8 +78,13 @@ private:
+     void contextMenuClosed(QCloseEvent *);
+     void showContextMenu(QPoint const&);
+     bool updateOffsets();
+-#ifdef __linux__
++#if defined(__linux__) || defined(__APPLE__)
+     QRegion m_windowMask;
++    // 快取：只在圖片幀/位置/縮放變動時才重算 mask 並 setMask（省下每幀重塑視窗的成本）
++    const void *m_maskAsset = nullptr;
++    bool m_maskMirror = false;
++    QPoint m_maskOrigin { -99999, -99999 };
++    double m_maskScale = -1.0;
+ #endif
+     bool m_windowedMode;
+     MascotData *m_data;

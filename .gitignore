@@ -9,3 +9,7 @@ Shijima-Qt.app/
 # 打包好的素材成品包（deliverable，改由 Releases 提供）
 # 素材源檔在 packs/usagi-shimeji/
 packs/*.zip
+
+# 內部工作筆記 / 設計 spec，不進版控
+docs/session-*.md
+docs/superpowers/
