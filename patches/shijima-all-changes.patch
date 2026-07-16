@@ -67,10 +67,10 @@ index 2115764..8496db9 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..c6dfcb2 100644
+index 69f6778..3bc5342 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,240 @@
+@@ -17,6 +17,243 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -78,6 +78,7 @@ index 69f6778..c6dfcb2 100644
 +#include <QDate>
 +#include <QTime>
 +#include <QPainter>
++#include <QPainterPath>
 +#include <QProcess>
 +#include <QMouseEvent>
 +#include <QMenu>
@@ -173,16 +174,17 @@ index 69f6778..c6dfcb2 100644
 +        QPainter p(this);
 +        p.setRenderHint(QPainter::Antialiasing);
 +        QColor line(0x59, 0x50, 0x4A);
-+        // 泡泡：先框、再尾巴蓋住框線、最後白補丁蓋掉尾巴頂邊 → 無縫
++        // 泡泡：框＋尾巴做布林聯集成單一形狀，一次描邊 → 真無縫
 +        p.setPen(QPen(line, 2.4));
 +        p.setBrush(Qt::white);
-+        p.drawRoundedRect(QRectF(2.5, 2.5, 55, 46), 13, 13);
++        QPainterPath rectPath;
++        rectPath.addRoundedRect(QRectF(2.5, 2.5, 55, 46), 13, 13);
++        QPainterPath tailPath;
 +        QPolygonF tail;
-+        tail << QPointF(22, 44) << QPointF(38, 44) << QPointF(30, 62);
-+        p.drawPolygon(tail);
-+        p.setPen(Qt::NoPen);
-+        p.drawRect(QRectF(24.2, 42.4, 11.6, 3.4));
-+        p.setPen(QPen(line, 2.4));
++        tail << QPointF(22, 42) << QPointF(38, 42) << QPointF(30, 62);
++        tailPath.addPolygon(tail);
++        tailPath.closeSubpath();
++        p.drawPath(rectPath.united(tailPath));
 +        if (m_mode == 1) {
 +            // 水杯：水位 = 今日達成率
 +            double topY = 13, botY = 33;
@@ -295,14 +297,15 @@ index 69f6778..c6dfcb2 100644
 +        QColor line(0x59, 0x50, 0x4A);
 +        p.setPen(QPen(line, 2.4));
 +        p.setBrush(Qt::white);
-+        p.drawRoundedRect(QRectF(2.5, 2.5, width() - 5, 36), 12, 12);
++        QPainterPath rectPath;
++        rectPath.addRoundedRect(QRectF(2.5, 2.5, width() - 5, 36), 12, 12);
++        QPainterPath tailPath;
 +        QPolygonF tail;
-+        tail << QPointF(width() / 2.0 - 8, 36) << QPointF(width() / 2.0 + 8, 36)
++        tail << QPointF(width() / 2.0 - 8, 34) << QPointF(width() / 2.0 + 8, 34)
 +             << QPointF(width() / 2.0, 52);
-+        p.drawPolygon(tail);
-+        p.setPen(Qt::NoPen);
-+        p.drawRect(QRectF(width() / 2.0 - 6.2, 34.4, 12.4, 3.4));
-+        p.setPen(QPen(line, 2.4));
++        tailPath.addPolygon(tail);
++        tailPath.closeSubpath();
++        p.drawPath(rectPath.united(tailPath));
 +        p.setPen(QPen(line, 1));
 +        p.drawText(QRectF(0, 2, width(), 36), Qt::AlignCenter, m_text);
 +    }
@@ -311,7 +314,7 @@ index 69f6778..c6dfcb2 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +986,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +989,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -338,7 +341,7 @@ index 69f6778..c6dfcb2 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1043,267 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1046,267 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -606,7 +609,7 @@ index 69f6778..c6dfcb2 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1329,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1332,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -617,7 +620,7 @@ index 69f6778..c6dfcb2 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1343,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1346,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
