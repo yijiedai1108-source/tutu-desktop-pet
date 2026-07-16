@@ -67,7 +67,7 @@ index 2115764..8496db9 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..3bc5342 100644
+index 69f6778..9366190 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,6 +17,243 @@
@@ -257,7 +257,7 @@ index 69f6778..3bc5342 100644
 +        setWindowFlags(flags);
 +        startTimer(80);
 +    }
-+    void say(QString const& text) {
++    void say(QString const& text, int durationMs = 3200) {
 +        m_text = text;
 +        QFont f = font();
 +        f.setPixelSize(17);
@@ -265,7 +265,7 @@ index 69f6778..3bc5342 100644
 +        setFont(f);
 +        QFontMetrics fm(f);
 +        setFixedSize(std::max(fm.horizontalAdvance(text) + 30, 52), 56);
-+        m_hideAtMs = QDateTime::currentMSecsSinceEpoch() + 3200;
++        m_hideAtMs = QDateTime::currentMSecsSinceEpoch() + durationMs;
 +        show();
 +        update();
 +    }
@@ -341,7 +341,7 @@ index 69f6778..3bc5342 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1046,267 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1046,274 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -517,12 +517,19 @@ index 69f6778..3bc5342 100644
 +        QProcess::startDetached("osascript", { "-e",
 +            QStringLiteral("display notification \"該下班了！辛苦一天了 🎉\" "
 +                "with title \"兔兔\"") });
-+        if (!m_mascots.empty()) {
-+            try { m_mascots.front()->mascot().next_behavior("Happy"); }
++        static_cast<SpeechBubble *>(m_speechBubble)->say(
++            QString::fromUtf8("下班了！🎉"), 8000);
++        m_celebrateUntilMs = QDateTime::currentMSecsSinceEpoch() + 20000;
++    }
++    m_lastTickTime = nowTime;
++
++    // 下班慶祝：20 秒內全場狂奔
++    if (QDateTime::currentMSecsSinceEpoch() < m_celebrateUntilMs) {
++        for (auto mascot : m_mascots) {
++            try { mascot->mascot().next_behavior("RunAlongWorkAreaFloor"); }
 +            catch (...) {}
 +        }
 +    }
-+    m_lastTickTime = nowTime;
 +
 +    // ヤハ彩蛋：隨機喊一聲，好感度越高越常跟你說話（Lv1 約 18 分鐘、Lv5 約 7.5 分鐘一次）
 +    int shoutOdds = 240 - affectionLevel() * 30;
@@ -609,7 +616,7 @@ index 69f6778..3bc5342 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1332,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1339,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -620,7 +627,7 @@ index 69f6778..3bc5342 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1346,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1353,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -630,7 +637,7 @@ index 69f6778..3bc5342 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..a12569f 100644
+index 3fc6de4..f96e12b 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -28,6 +28,7 @@
@@ -669,7 +676,7 @@ index 3fc6de4..a12569f 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +120,19 @@ private:
+@@ -105,6 +120,20 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -684,6 +691,7 @@ index 3fc6de4..a12569f 100644
 +    double m_sitSeconds = 0;
 +    int m_affection = 0;
 +    double m_neglectSeconds = 0;
++    qint64 m_celebrateUntilMs = 0;
 +    QTime m_lastTickTime;
 +    qint64 m_lastCryMs = 0;
      bool m_allowClose = false;
