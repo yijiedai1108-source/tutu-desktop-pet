@@ -15,10 +15,10 @@ index 5ca3ada..73aefc2 100644
  	path = cpp-httplib
  	url = https://github.com/yhirose/cpp-httplib
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..1290b4e 100644
+index 2115764..383c2bb 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
-@@ -19,12 +19,36 @@
+@@ -19,12 +19,38 @@
  #include "ShijimaContextMenu.hpp"
  #include "ShijimaWidget.hpp"
  #include "ShijimaManager.hpp"
@@ -35,6 +35,8 @@ index 2115764..1290b4e 100644
 +        action = addAction(manager->hungerStatusText());
 +        action->setEnabled(false);
 +        action = addAction(manager->waterStatusText());
++        action->setEnabled(false);
++        action = addAction(manager->affectionStatusText());
 +        action->setEnabled(false);
 +        action = addAction("餵食 🥕");
 +        connect(action, &QAction::triggered, [this](){
@@ -56,10 +58,10 @@ index 2115764..1290b4e 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..ca4b811 100644
+index 69f6778..2ee25f5 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,150 @@
+@@ -17,6 +17,218 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -70,6 +72,7 @@ index 69f6778..ca4b811 100644
 +#include <QProcess>
 +#include <QMouseEvent>
 +#include <QMenu>
++#include <QRandomGenerator>
 +#include <algorithm>
 +
 +namespace {
@@ -206,11 +209,78 @@ index 69f6778..ca4b811 100644
 +        p.drawEllipse(QRectF(20, 28, 4.5, 7));
 +    }
 +};
++
++// 隨機吶喊對話框（ヤハ！ウラ！），數秒後自動消失
++class SpeechBubble : public QWidget {
++public:
++    SpeechBubble(): QWidget(nullptr) {
++        setAttribute(Qt::WA_TranslucentBackground);
++        setAttribute(Qt::WA_NoSystemBackground);
++        setAttribute(Qt::WA_ShowWithoutActivating);
++        Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint
++            | Qt::WindowDoesNotAcceptFocus | Qt::NoDropShadowWindowHint;
++        #if defined(__APPLE__)
++        flags |= Qt::Window;
++        #else
++        flags |= Qt::Tool;
++        #endif
++        setWindowFlags(flags);
++        startTimer(80);
++    }
++    void say(QString const& text) {
++        m_text = text;
++        QFont f = font();
++        f.setPixelSize(17);
++        f.setBold(true);
++        setFont(f);
++        QFontMetrics fm(f);
++        setFixedSize(std::max(fm.horizontalAdvance(text) + 30, 52), 56);
++        m_hideAtMs = QDateTime::currentMSecsSinceEpoch() + 3200;
++        show();
++        update();
++    }
++protected:
++    QString m_text;
++    qint64 m_hideAtMs = 0;
++    void timerEvent(QTimerEvent *) override {
++        if (!isVisible()) {
++            return;
++        }
++        if (QDateTime::currentMSecsSinceEpoch() > m_hideAtMs) {
++            hide();
++            return;
++        }
++        auto &list = ShijimaManager::defaultManager()->mascots();
++        if (list.empty()) {
++            hide();
++            return;
++        }
++        auto w = list.front();
++        move(w->x() + w->width() / 2 - width() / 2, w->y() - height() + 12);
++    }
++    void mousePressEvent(QMouseEvent *) override {
++        hide();
++    }
++    void paintEvent(QPaintEvent *) override {
++        QPainter p(this);
++        p.setRenderHint(QPainter::Antialiasing);
++        QColor line(0x59, 0x50, 0x4A);
++        p.setPen(QPen(line, 2.4));
++        p.setBrush(Qt::white);
++        QPolygonF tail;
++        tail << QPointF(width() / 2.0 - 8, 36) << QPointF(width() / 2.0 + 8, 36)
++             << QPointF(width() / 2.0, 52);
++        p.drawPolygon(tail);
++        p.drawRoundedRect(QRectF(2.5, 2.5, width() - 5, 36), 12, 12);
++        p.setPen(QPen(line, 1));
++        p.drawText(QRectF(0, 2, width(), 36), Qt::AlignCenter, m_text);
++    }
++};
 +}
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +896,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +964,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -223,12 +293,21 @@ index 69f6778..ca4b811 100644
 +    m_thirstSeconds = m_settings.value("water/thirstSeconds", 0.0).toDouble();
 +    m_waterMlToday = m_settings.value("water/mlToday", 0).toInt();
 +    m_waterDate = m_settings.value("water/date", QString()).toString();
++    m_affection = m_settings.value("affection/points", 0).toInt();
++    if (m_settings.value("affection/lastSeenDate").toString()
++        != QDate::currentDate().toString(Qt::ISODate))
++    {
++        m_settings.setValue("affection/lastSeenDate",
++            QDate::currentDate().toString(Qt::ISODate));
++        addAffection(5);   // 每日見面禮
++    }
 +    m_hungerTickTimer = startTimer(5000);
 +    m_puddingBubble = new PuddingBubble();
++    m_speechBubble = new SpeechBubble();
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +944,166 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1021,223 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -254,6 +333,8 @@ index 69f6778..ca4b811 100644
 +void ShijimaManager::feed(ShijimaWidget *widget) {
 +    m_hungerSeconds = 0;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
++    m_neglectSeconds = 0;
++    addAffection(10);
 +    if (m_puddingBubble != nullptr) {
 +        m_puddingBubble->hide();
 +    }
@@ -276,7 +357,9 @@ index 69f6778..ca4b811 100644
 +
 +void ShijimaManager::drink(ShijimaWidget *widget, int ml) {
 +    m_thirstSeconds = 0;
++    bool wasBelowGoal = m_waterMlToday < 2000;
 +    m_waterMlToday += ml;
++    addAffection(m_waterMlToday >= 2000 && wasBelowGoal ? 25 : 5);
 +    m_settings.setValue("water/thirstSeconds", m_thirstSeconds);
 +    m_settings.setValue("water/mlToday", m_waterMlToday);
 +    if (m_puddingBubble != nullptr) {
@@ -302,6 +385,29 @@ index 69f6778..ca4b811 100644
 +    }
 +    return QStringLiteral("💧 今日 %1 / 2000 ml（%2%）")
 +        .arg(m_waterMlToday).arg(percent);
++}
++
++void ShijimaManager::addAffection(int delta) {
++    m_affection = std::max(0, m_affection + delta);
++    m_settings.setValue("affection/points", m_affection);
++}
++
++int ShijimaManager::affectionLevel() const {
++    if (m_affection >= 600) return 5;
++    if (m_affection >= 300) return 4;
++    if (m_affection >= 150) return 3;
++    if (m_affection >= 50) return 2;
++    return 1;
++}
++
++QString ShijimaManager::affectionStatusText() const {
++    static const char *names[] = {
++        "", "陌生兔兔", "有點熟了", "朋友", "麻吉", "家人"
++    };
++    return QStringLiteral("❤️ 好感度 Lv.%1 %2（%3）")
++        .arg(affectionLevel())
++        .arg(QString::fromUtf8(names[affectionLevel()]))
++        .arg(m_affection);
 +}
 +
 +void ShijimaManager::triggerCry(bool all) {
@@ -359,6 +465,36 @@ index 69f6778..ca4b811 100644
 +    }
 +    m_lastTickTime = nowTime;
 +
++    // ヤハ彩蛋：隨機喊一聲，好感度越高越常跟你說話（Lv1 約 18 分鐘、Lv5 約 7.5 分鐘一次）
++    int shoutOdds = 240 - affectionLevel() * 30;
++    if (!m_mascots.empty() && !windowedMode() && !m_puddingBubble->isVisible()
++        && QRandomGenerator::global()->bounded(shoutOdds) == 0)
++    {
++        static const char *shouts[] = {
++            "ヤハ！", "ウラ！", "ウラヤハ！！", "ウラウラ！"
++        };
++        static const char *fondShouts[] = {
++            "うらうら〜❤️", "ヤハ〜❤️"
++        };
++        QString text;
++        if (affectionLevel() >= 3 && QRandomGenerator::global()->bounded(4) == 0) {
++            text = QString::fromUtf8(fondShouts[QRandomGenerator::global()->bounded(2)]);
++        }
++        else {
++            text = QString::fromUtf8(shouts[QRandomGenerator::global()->bounded(4)]);
++        }
++        static_cast<SpeechBubble *>(m_speechBubble)->say(text);
++    }
++
++    // 冷落懲罰：放著哭哭不管，每 10 分鐘 -5
++    if (hungerState() == HungerState::Hungry) {
++        m_neglectSeconds += 5.0 * m_hungerScale;
++        if (m_neglectSeconds >= 600) {
++            m_neglectSeconds = 0;
++            addAffection(-5);
++        }
++    }
++
 +    auto state = hungerState();
 +    bool wantPudding = state == HungerState::Hungry;
 +    bool wantWater = m_thirstSeconds >= 45 * 60 && m_waterMlToday < 2000;
@@ -395,7 +531,7 @@ index 69f6778..ca4b811 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1129,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1263,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -406,7 +542,7 @@ index 69f6778..ca4b811 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1143,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1277,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -416,7 +552,7 @@ index 69f6778..ca4b811 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..504cd1c 100644
+index 3fc6de4..f76159a 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -28,6 +28,7 @@
@@ -427,7 +563,7 @@ index 3fc6de4..504cd1c 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -62,6 +63,12 @@ public:
+@@ -62,6 +63,15 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -435,12 +571,15 @@ index 3fc6de4..504cd1c 100644
 +    HungerState hungerState() const;
 +    QString hungerStatusText() const;
 +    QString waterStatusText() const;
++    QString affectionStatusText() const;
++    int affectionLevel() const;
++    void addAffection(int delta);
 +    void feed(ShijimaWidget *widget);
 +    void drink(ShijimaWidget *widget, int ml = 250);
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +103,8 @@ private:
+@@ -96,6 +106,8 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -449,18 +588,21 @@ index 3fc6de4..504cd1c 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +114,16 @@ private:
+@@ -105,6 +117,19 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
 +    int m_hungerTickTimer = -1;
 +    QWidget *m_puddingBubble = nullptr;
++    QWidget *m_speechBubble = nullptr;
 +    double m_hungerSeconds = 0;
 +    double m_thirstSeconds = 0;
 +    int m_waterMlToday = 0;
 +    QString m_waterDate;
 +    double m_hungerScale = 1.0;
 +    double m_sitSeconds = 0;
++    int m_affection = 0;
++    double m_neglectSeconds = 0;
 +    QTime m_lastTickTime;
 +    qint64 m_lastCryMs = 0;
      bool m_allowClose = false;
