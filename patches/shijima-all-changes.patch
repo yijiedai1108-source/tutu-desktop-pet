@@ -67,10 +67,10 @@ index 2115764..8496db9 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..297b696 100644
+index 69f6778..2fe299c 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,248 @@
+@@ -17,6 +17,343 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -102,8 +102,15 @@ index 69f6778..297b696 100644
 +            update();
 +        }
 +    }
++    void setFood(int food) {
++        if (m_food != food) {
++            m_food = food;
++            update();
++        }
++    }
 +private:
-+    int m_mode = 0; // 0 布丁、1 水杯
++    int m_mode = 0; // 0 食物、1 水杯
++    int m_food = 0; // 想吃的菜（FOOD_TABLE 索引）
 +    double m_progress = 0; // 今日飲水達成率 0~1
 +public:
 +    PuddingBubble(): QWidget(nullptr) {
@@ -218,25 +225,113 @@ index 69f6778..297b696 100644
 +                QString::number((int)(m_progress * 100)) + "%");
 +            return;
 +        }
-+        // 布丁
-+        QPolygonF body;
-+        body << QPointF(19, 17) << QPointF(41, 17) << QPointF(46, 37) << QPointF(14, 37);
-+        p.setPen(Qt::NoPen);
-+        p.setBrush(QColor(0xFF, 0xE0, 0x82));
-+        p.drawPolygon(body);
-+        QPolygonF cap;
-+        cap << QPointF(19, 17) << QPointF(41, 17) << QPointF(43, 25.5) << QPointF(17, 25.5);
-+        p.setBrush(QColor(0xA6, 0x6E, 0x3D));
-+        p.drawPolygon(cap);
-+        for (auto fx : { 22.0, 30.0, 38.0 }) {
-+            p.drawEllipse(QPointF(fx, 25.5), 2.0, 2.0);
++        drawFood(p, line);
++    }
++    void drawFood(QPainter &p, QColor const& line) {
++        switch (m_food) {
++        default:
++        case 0: { // 布丁
++            QPolygonF body;
++            body << QPointF(19, 17) << QPointF(41, 17)
++                 << QPointF(46, 37) << QPointF(14, 37);
++            p.setPen(Qt::NoPen);
++            p.setBrush(QColor(0xFF, 0xE0, 0x82));
++            p.drawPolygon(body);
++            QPolygonF cap;
++            cap << QPointF(19, 17) << QPointF(41, 17)
++                << QPointF(43, 25.5) << QPointF(17, 25.5);
++            p.setBrush(QColor(0xA6, 0x6E, 0x3D));
++            p.drawPolygon(cap);
++            for (auto fx : { 22.0, 30.0, 38.0 }) {
++                p.drawEllipse(QPointF(fx, 25.5), 2.0, 2.0);
++            }
++            p.setPen(QPen(line, 2.2));
++            p.setBrush(Qt::NoBrush);
++            p.drawPolygon(body);
++            p.setPen(Qt::NoPen);
++            p.setBrush(QColor(0xFF, 0xF8, 0xE1));
++            p.drawEllipse(QRectF(20, 28, 4.5, 7));
++            break;
 +        }
-+        p.setPen(QPen(line, 2.2));
-+        p.setBrush(Qt::NoBrush);
-+        p.drawPolygon(body);
-+        p.setPen(Qt::NoPen);
-+        p.setBrush(QColor(0xFF, 0xF8, 0xE1));
-+        p.drawEllipse(QRectF(20, 28, 4.5, 7));
++        case 1: { // 飯糰
++            QPolygonF tri;
++            tri << QPointF(30, 13) << QPointF(44, 36) << QPointF(16, 36);
++            p.setPen(QPen(line, 3.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
++            p.setBrush(Qt::white);
++            p.drawPolygon(tri);
++            p.setPen(QPen(line, 1.6));
++            p.setBrush(QColor(0x34, 0x42, 0x34));
++            p.drawRoundedRect(QRectF(25, 27, 10, 9.5), 1.5, 1.5);
++            break;
++        }
++        case 2: { // 郎拉麵
++            p.setPen(QPen(line, 2.2));
++            p.setBrush(Qt::white);
++            p.drawChord(QRectF(13, 9, 34, 27), 180 * 16, 180 * 16);
++            p.setPen(Qt::NoPen);
++            p.setBrush(QColor(0xD6, 0x54, 0x4C));
++            p.drawRect(QRectF(19, 28.5, 22, 2.4));
++            p.setPen(QPen(line, 2.2));
++            p.setBrush(QColor(0xF7, 0xD2, 0x78));
++            p.drawEllipse(QRectF(13, 18.4, 34, 8.4));
++            p.setPen(QPen(line, 1.2));
++            p.setBrush(Qt::NoBrush);
++            for (auto fx : { 19.0, 26.0, 33.0 }) {
++                p.drawArc(QRectF(fx, 20.8, 5.5, 3.2), 0, 180 * 16);
++            }
++            p.setPen(QPen(QColor(185, 185, 185), 1.6));
++            for (auto fx : { 24.0, 34.0 }) {
++                p.drawArc(QRectF(fx, 8, 3.4, 8), 90 * 16, 180 * 16);
++            }
++            break;
++        }
++        case 3: { // 草莓蛋糕
++            p.setPen(QPen(line, 2));
++            p.setBrush(QColor(0xFA, 0xE3, 0xA0));
++            p.drawRoundedRect(QRectF(18, 21.5, 24, 15), 1.5, 1.5);
++            p.setPen(Qt::NoPen);
++            p.setBrush(Qt::white);
++            p.drawRect(QRectF(19, 27, 22, 4));
++            p.setPen(QPen(line, 2));
++            p.drawRoundedRect(QRectF(16.5, 17.5, 27, 6), 3, 3);
++            for (auto fx : { 22.0, 29.0, 36.0 }) {
++                p.setPen(QPen(line, 1.4));
++                p.setBrush(Qt::white);
++                p.drawEllipse(QRectF(fx, 21, 3.6, 4.2));
++            }
++            p.setPen(Qt::NoPen);
++            p.setBrush(Qt::white);
++            p.drawRect(QRectF(18, 20, 24, 3));
++            p.setPen(QPen(line, 1.8));
++            p.setBrush(QColor(0xE2, 0x3D, 0x4A));
++            p.drawEllipse(QRectF(26.6, 10.5, 6.8, 7.5));
++            break;
++        }
++        case 4: { // 布丁阿拉摩德
++            p.setPen(QPen(line, 1.8));
++            p.setBrush(QColor(0xF0, 0xF0, 0xF5));
++            p.drawEllipse(QRectF(11, 30, 38, 8));
++            QPolygonF body;
++            body << QPointF(21, 15) << QPointF(33, 15)
++                 << QPointF(36, 32) << QPointF(18, 32);
++            p.setPen(Qt::NoPen);
++            p.setBrush(QColor(0xFF, 0xE0, 0x82));
++            p.drawPolygon(body);
++            QPolygonF cap;
++            cap << QPointF(21, 15) << QPointF(33, 15)
++                << QPointF(34.2, 21.5) << QPointF(19.8, 21.5);
++            p.setBrush(QColor(0xA6, 0x6E, 0x3D));
++            p.drawPolygon(cap);
++            p.setPen(QPen(line, 1.8));
++            p.setBrush(Qt::NoBrush);
++            p.drawPolygon(body);
++            p.setBrush(Qt::white);
++            p.drawEllipse(QRectF(36, 20, 8, 6.5));
++            p.setBrush(QColor(0xD0, 0x2C, 0x42));
++            p.drawEllipse(QRectF(38, 13.5, 5.5, 5.5));
++            break;
++        }
++        }
 +    }
 +};
 +
@@ -319,7 +414,7 @@ index 69f6778..297b696 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +994,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +1089,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -346,7 +441,7 @@ index 69f6778..297b696 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1051,308 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1146,309 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -621,6 +716,7 @@ index 69f6778..297b696 100644
 +        && !windowedMode();
 +    if (wantBubble) {
 +        bubble->setMode(wantPudding ? 0 : 1);
++        bubble->setFood(m_craving);
 +        bubble->setProgress(m_waterMlToday / 2000.0);
 +    }
 +    if (wantBubble != bubble->isVisible()) {
@@ -655,7 +751,7 @@ index 69f6778..297b696 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +1378,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1474,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -666,7 +762,7 @@ index 69f6778..297b696 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +1392,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1488,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
