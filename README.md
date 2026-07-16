@@ -1,0 +1,92 @@
+# 🐰 兔兔桌寵（Usagi Desktop Pet）
+
+一隻住在你 macOS 桌面上的兔兔：會走路、爬牆、站在 Dock 上，肚子餓會哭哭討布丁，
+每 45 分鐘提醒你喝水，上班時間陪你打電腦，下班時間帶頭慶祝狂奔。
+
+> ⚠️ 僅供朋友私下使用。兔兔素材為 nagano《ちいかわ》角色的同人加工，
+> **請不要公開散佈或上傳到公開平台**。引擎程式碼為 GPLv3 開源（見下方版權）。
+
+---
+
+## 系統需求
+
+- Apple Silicon 的 Mac（M1 以上）
+- macOS 15 或更新
+
+## 安裝（三分鐘）
+
+1. 下載並解壓縮發佈包，會拿到兩個東西：
+   - `Shijima-Qt.app` — 桌寵引擎（改造版）
+   - `usagi-shimeji-v2.zip` — 兔兔素材包（**不要解壓縮**）
+2. 打開 `Shijima-Qt.app`。macOS 會說「無法驗證開發者」——
+   對 app **按右鍵 → 打開**（或系統設定 → 隱私權與安全性 → 強制打開）。
+   這是因為 app 沒有付費簽名，程式本身是開源可查的。
+3. 把 `usagi-shimeji-v2.zip` **直接拖進** Shijima 的視窗完成匯入。
+4. 在清單中**雙擊 Usagi**，兔兔就出現在桌面上了。
+5. （建議）系統設定 → 隱私權與安全性 → **輔助使用** → 加入 Shijima-Qt 並打勾，
+   兔兔才能站在你的視窗頂端。
+6. （建議）第一次出現通知詢問時按「允許」，喝水/下班提醒才收得到。
+
+## 功能一覽
+
+| 功能 | 說明 |
+|---|---|
+| 🚶 日常 | 亂走、發呆、坐下、睡覺、爬牆、爬天花板、站 Dock、拖曳丟擲 |
+| 🍮 肚子餓 | 2 小時沒餵會哭哭，頭上冒**布丁對話框**，點布丁餵食 |
+| 💧 喝水提醒 | 每 45 分鐘冒**水杯對話框**提醒你喝水，點擊選水量（100/250/500ml），杯中水位＝今日達成率，日標 2000ml 達標後當天不再吵 |
+| 🧘 久坐提醒 | 每 50 分鐘通知＋兔兔做伸展操 |
+| 💻 上班打電腦 | 平日上班時間（預設 09:00–18:00）偶爾拿出兔子牌筆電打字 |
+| 🎉 下班儀式 | 到下班時間：通知＋對話框「下班了！」＋全場狂奔 20 秒 |
+| ❤️ 好感度 | 餵食/喝水/每日見面加分，冷落哭哭扣分；5 級稱號，等級越高兔兔越黏你、解鎖越高級的食物（布丁→飯糰→郎拉麵→草莓蛋糕→布丁阿拉摩德） |
+| ヤハ！ | 隨機冒出吶喊對話框（ヤハ！ウラ！…），好感度高會撒嬌 ❤️ |
+| 🐇 增殖 | 兔兔偶爾會分裂或從螢幕邊拔出新兔兔（上限 50 隻），右鍵 → Dismiss all but one 可清場 |
+
+## 右鍵選單（點兔兔）
+
+- 最上面三行是狀態：飢餓、今日飲水、好感度
+- **餵食** / **喝水**：手動記錄（餵食選單依好感度等級解鎖菜色）
+- **Behaviors**：手動觸發任何動作（想看打電腦選 Work、伸展選 Stretch）
+- **Dismiss**：收掉兔兔
+
+## 自訂設定（終端機指令，改完重開 app）
+
+```bash
+# 下班時間（預設 18:00）
+defaults write com.pixelomer.Shijima-Qt "workday.end" -string "18:30"
+
+# 上班開始時間（預設 09:00，影響打電腦時段）
+defaults write com.pixelomer.Shijima-Qt "workday.start" -string "09:30"
+
+# 重設好感度 / 直接調分數（50=Lv2, 150=Lv3, 300=Lv4, 600=Lv5）
+defaults write com.pixelomer.Shijima-Qt "affection.points" -int 0
+```
+
+想快速體驗全部功能（時間加速 60 倍，2 小時變 2 分鐘）：
+
+```bash
+SHIJIMA_HUNGER_SCALE=60 /Applications/Shijima-Qt.app/Contents/MacOS/shijima-qt
+```
+
+## 開機自動啟動（可選）
+
+把 `launchagent/com.pixelomer.ShijimaQt.plist` 裡的路徑改成你的 app 實際位置，然後：
+
+```bash
+cp launchagent/com.pixelomer.ShijimaQt.plist ~/Library/LaunchAgents/
+```
+
+反悔就刪掉那個檔案。
+
+## FAQ
+
+- **兔兔越生越多？** 這是 Shimeji 傳統藝能（分裂＋拔蘿蔔），右鍵 → Dismiss all but one。
+- **通知沒出現？** 系統設定 → 通知 → 找「Script Editor／工序指令編寫程式」→ 允許。
+- **兔兔站不上視窗？** 檢查輔助使用權限（見安裝第 5 步）。
+- **Intel Mac 能玩嗎？** 這個包只編了 Apple Silicon 版，需要的話可以照 `patches/README.md` 自己編。
+
+## 版權與致謝
+
+- 引擎基於 [pixelomer/Shijima-Qt](https://github.com/pixelomer/Shijima-Qt)（GPLv3）改造，
+  修改內容與建置方法見 `patches/`；本 fork 同樣以 GPLv3 授權，原始碼都在這個 repo。
+- 兔兔素材源自網路同人 Shimeji 素材（原角色 © nagano／《ちいかわ》），
+  經本專案加工（表情、食物、動作幀）。**僅限私人使用，請勿公開散佈。**
