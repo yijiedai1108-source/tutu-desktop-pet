@@ -1,0 +1,181 @@
+diff --git a/.gitmodules b/.gitmodules
+index 5ca3ada..73aefc2 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -1,9 +1,9 @@
+ [submodule "libshijima"]
+ 	path = libshijima
+-	url = git@github.com:pixelomer/libshijima
++	url = https://github.com/pixelomer/libshijima
+ [submodule "libshimejifinder"]
+ 	path = libshimejifinder
+-	url = git@github.com:pixelomer/libshimejifinder
++	url = https://github.com/pixelomer/libshimejifinder
+ [submodule "cpp-httplib"]
+ 	path = cpp-httplib
+ 	url = https://github.com/yhirose/cpp-httplib
+diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
+index 2115764..6f44c19 100644
+--- a/ShijimaContextMenu.cc
++++ b/ShijimaContextMenu.cc
+@@ -25,6 +25,18 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+ {
+     QAction *action;
+ 
++    // 養成：狀態顯示＋餵食
++    {
++        auto manager = ShijimaManager::defaultManager();
++        action = addAction(manager->hungerStatusText());
++        action->setEnabled(false);
++        action = addAction("餵食 🥕");
++        connect(action, &QAction::triggered, [this](){
++            ShijimaManager::defaultManager()->feed(shijimaParent());
++        });
++        addSeparator();
++    }
++
+     // Behaviors menu   
+     {
+         std::vector<std::string> behaviors;
+diff --git a/ShijimaManager.cc b/ShijimaManager.cc
+index 69f6778..9f53bc0 100644
+--- a/ShijimaManager.cc
++++ b/ShijimaManager.cc
+@@ -17,6 +17,7 @@
+ // 
+ 
+ #include "ShijimaManager.hpp"
++#include <QDateTime>
+ #include <cmath>
+ #include <exception>
+ #include <filesystem>
+@@ -752,6 +753,13 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+     buildToolbar();
+ 
+     m_httpApi.start("127.0.0.1", 32456);
++
++    // 養成：飢餓計時（SHIJIMA_HUNGER_SCALE 可加速測試）
++    if (auto scale = qEnvironmentVariable("SHIJIMA_HUNGER_SCALE"); !scale.isEmpty()) {
++        m_hungerScale = std::max(1.0, scale.toDouble());
++    }
++    m_hungerSeconds = m_settings.value("hunger/seconds", 0.0).toDouble();
++    m_hungerTickTimer = startTimer(5000);
+ }
+ 
+ void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
+@@ -789,6 +797,60 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+     else if (timerId == m_windowObserverTimer) {
+         m_windowObserver.tick();
+     }
++    else if (timerId == m_hungerTickTimer) {
++        hungerTick();
++    }
++}
++
++ShijimaManager::HungerState ShijimaManager::hungerState() const {
++    if (m_hungerSeconds >= 120 * 60) return HungerState::Hungry;
++    if (m_hungerSeconds >= 90 * 60) return HungerState::Peckish;
++    return HungerState::Full;
++}
++
++QString ShijimaManager::hungerStatusText() const {
++    switch (hungerState()) {
++        case HungerState::Hungry: return QStringLiteral("😭 哭哭中…快餵我");
++        case HungerState::Peckish: return QStringLiteral("🍞 有點餓了");
++        default: return QStringLiteral("😊 吃飽了");
++    }
++}
++
++void ShijimaManager::feed(ShijimaWidget *widget) {
++    m_hungerSeconds = 0;
++    m_settings.setValue("hunger/seconds", m_hungerSeconds);
++    if (widget != nullptr) {
++        // 慶祝：追著滑鼠跑；沒有這個行為就退回一般跑步
++        try { widget->mascot().next_behavior("ChaseMouse"); }
++        catch (...) {
++            try { widget->mascot().next_behavior("RunAlongWorkAreaFloor"); }
++            catch (...) {}
++        }
++    }
++}
++
++void ShijimaManager::triggerCry(bool all) {
++    for (auto mascot : m_mascots) {
++        try { mascot->mascot().next_behavior("Cry"); }
++        catch (...) {}
++        if (!all) break;
++    }
++}
++
++void ShijimaManager::hungerTick() {
++    m_hungerSeconds += 5.0 * m_hungerScale;
++    m_settings.setValue("hunger/seconds", m_hungerSeconds);
++    auto state = hungerState();
++    if (state == HungerState::Full || m_mascots.empty()) {
++        return;
++    }
++    qint64 now = QDateTime::currentMSecsSinceEpoch();
++    qint64 interval = qMax<qint64>(10,
++        (qint64)((state == HungerState::Hungry ? 40 : 180) / m_hungerScale)) * 1000;
++    if (now - m_lastCryMs >= interval) {
++        m_lastCryMs = now;
++        triggerCry(state == HungerState::Hungry);
++    }
+ }
+ 
+ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +876,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+         geometry = screen->geometry();
+         available = screen->availableGeometry();
+     }
+-    int taskbarHeight = available.bottom() - geometry.bottom();
+-    int statusBarHeight = geometry.top() - available.top();
++    int taskbarHeight = geometry.bottom() - available.bottom();
++    int statusBarHeight = available.top() - geometry.top();
+     if (taskbarHeight < 0) {
+         taskbarHeight = 0;
+     }
+@@ -828,7 +890,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+         (double)geometry.left() };
+     env->floor = { (double)geometry.bottom() - taskbarHeight,
+         (double)geometry.left(), (double)geometry.right() };
+-    env->work_area = { (double)geometry.top(),
++    env->work_area = { (double)geometry.top() + statusBarHeight,
+         (double)geometry.right(),
+         (double)geometry.bottom() - taskbarHeight,
+         (double)geometry.left() };
+diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
+index 3fc6de4..6a1e02c 100644
+--- a/ShijimaManager.hpp
++++ b/ShijimaManager.hpp
+@@ -62,6 +62,10 @@ public:
+     std::map<int, ShijimaWidget *> const& mascotsById();
+     ShijimaWidget *hitTest(QPoint const& screenPos);
+     void onTickSync(std::function<void(ShijimaManager *)> callback);
++    enum class HungerState { Full, Peckish, Hungry };
++    HungerState hungerState() const;
++    QString hungerStatusText() const;
++    void feed(ShijimaWidget *widget);
+     ~ShijimaManager();
+ protected:
+     void timerEvent(QTimerEvent *event) override;
+@@ -96,6 +100,8 @@ private:
+     std::set<std::string> import(QString const& path) noexcept;
+     void importWithDialog(QList<QString> const& paths);
+     void tick();
++    void hungerTick();
++    void triggerCry(bool all);
+     QScreen *mascotScreen();
+     QColor m_sandboxBackground;
+     QAction *m_windowedModeAction;
+@@ -105,6 +111,10 @@ private:
+     Platform::ActiveWindow m_currentWindow;
+     Platform::ActiveWindowObserver m_windowObserver;
+     int m_mascotTimer = -1;
++    int m_hungerTickTimer = -1;
++    double m_hungerSeconds = 0;
++    double m_hungerScale = 1.0;
++    qint64 m_lastCryMs = 0;
+     bool m_allowClose = false;
+     bool m_firstShow = true;
+     bool m_wasVisible = false;
