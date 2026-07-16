@@ -6,7 +6,7 @@
 	<string>com.pixelomer.ShijimaQt</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/yijie/chiikawa-pet/Shijima-Qt.app/Contents/MacOS/shijima-qt</string>
+		<string>/Users/yijie/Desktop/chiikawa-pet/Shijima-Qt.app/Contents/MacOS/shijima-qt</string>
 	</array>
 	<key>RunAtLoad</key>
 	<true/>
