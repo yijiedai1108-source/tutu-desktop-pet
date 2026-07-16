@@ -54,3 +54,23 @@ Shijima.app（引擎：物理、行為排程、視窗偵測）
 
 - Shijima 相容性：若預設 conf 與自製圖有對不上的動作編號，以 Shijima 內建檢查器（inspector）除錯。
 - 視窗互動在部分環境可能失效（itch.io 評論見於 Linux；macOS 待實測），失效時退回螢幕邊緣行走，不影響其餘功能。
+
+---
+
+## 第二階段增補（2026-07-16 核可）
+
+### 養成系統（fork 內建）
+
+- **飢餓計時**：只計 app 運行時間，5 秒 tick 累計（QSettings `hunger/seconds` 持久化，重開接續）。
+  - 90 分鐘 →「有點餓」：每 3 分鐘觸發一次啜泣（單隻）
+  - 120 分鐘 →「哭哭」：每 40 秒全場強制 Cry
+  - 溫和派：不會死、不會離家出走
+- **餵食**：右鍵寵物 → 選單頂部顯示狀態（😊 吃飽了／🍞 有點餓了／😭 哭哭中…快餵我，經使用者確認用 emoji）＋「餵食 🥕」；餵食歸零並觸發 ChaseMouse 慶祝（fallback RunAlongWorkAreaFloor）。
+- **Cry 行為**：素材包新增 shime47/48（坐姿＋合成眼淚兩幀，PIL 超取樣合成）、actions.xml `Cry`（Stay/Floor，淚幀交替 ×10 ≈ 10 秒）、behaviors.xml `Cry` Frequency=0（僅程式或選單觸發）。
+- **測試加速**：環境變數 `SHIJIMA_HUNGER_SCALE`（如 60 → 2 小時變 2 分鐘；哭哭間隔同步縮短，下限 10 秒）。
+
+### 切邊修正
+
+- 病灶：`work_area.top`（行為天花板）與 `env->screen.top`（sprite 視窗可及上限）不一致——天花板在絕對 y=0、視窗被夾在選單列下，爬天花板時頭被切。
+- 修法：`work_area.top` 也加 `statusBarHeight`，天花板行為掛在選單列下緣。
+- 已知殘留：爬牆到最頂端瞬間身體探出螢幕的切邊為 Shimeji 素材錨點特性（Windows 原版相同），不處理。
