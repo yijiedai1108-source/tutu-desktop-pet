@@ -45,8 +45,14 @@
   `environment.hpp` 加成員；`ShijimaManager::updateEnvironment` 從設定注入）。做法是「加大每步位移」而非
   「加快 tick」——動畫維持自然（不會快轉）。全方向一致。上限 3.5（再高會一步跨過邊界判定卡住）。
   ```bash
-  defaults write com.pixelomer.Shijima-Qt "mascot.speed" -float 2.5   # 走/爬/掉速度倍率（0.2~3.5，預設 1.0）
+  defaults write com.pixelomer.Shijima-Qt "mascot.speed" -float 2.5   # 走/爬/掉速度倍率（0.2~3.5）
   ```
+  程式內預設值已改為 **2.5**（= 定案手感；2026-07-16 改，原為 1.0）——Windows 沒有 defaults 指令，
+  靠程式內預設值讓新安裝直接是定案手感。已設過的機器不受影響（設定值優先）。
+- 跨平台通知（`ShijimaManager::notify`，2026-07-16 加，Windows 支援的一部分）：原本三處提醒
+  （久坐、下班、肚子餓/喝水）直接呼叫 `osascript`，Windows 上會靜默失敗。抽成 `notify(message)`：
+  macOS 維持 osascript 通知中心；其他平台 lazy 建一個 `QSystemTrayIcon`（🐰 圖示）用
+  `showMessage()`——Windows 10/11 會顯示原生 toast。
 - 自動跨螢幕：**嘗試過但已還原**。做法是「相鄰螢幕側打通邊界 + 非拖曳時 `screenAt` 切換環境」，
   但在「上下堆疊且偏移」的雙螢幕上，接縫 y=0 同屬兩螢幕會造成反覆切換/全體變慢，且爬牆跨接不順。
   目前維持原生的**拖曳跨螢幕**（把兔兔拖到另一個螢幕即可）。
@@ -55,6 +61,14 @@
   `CONFIG=release make -j8 QT_MACOS_PATH=/opt/homebrew/opt/qt/lib CONFIG_LDFLAGS="-flto -Wl,-headerpad_max_install_names"`
   （submodule 的 SSH URL 要改 https；unarr 需 `CMAKE_POLICY_VERSION_MINIMUM=3.5`；
   libarchive keg-only 要設 `PKG_CONFIG_PATH=/opt/homebrew/opt/libarchive/lib/pkgconfig`）
+- 建置（Windows x86_64）：**用 GitHub Actions**（`.github/workflows/build-windows.yml`，
+  手動 dispatch 或改動 `patches/**` 推上 main 自動觸發）。流程照抄上游：clone v0.1.0 → 套兩份 patch →
+  上游 `dev-docker/`（Fedora 42 + MinGW Qt6）Docker 交叉編譯 `mingw64-make` → 產物在
+  `publish/Windows/release/`（exe + 全部 DLL），workflow 再把 `packs/usagi-shimeji` 壓成 zip、
+  連同 `docs/README-windows.txt` 一起打成 `tutu-windows-x86_64` artifact。
+  Windows 不需要遮罩/點擊穿透 patch（`useWindowMasks()` 回 false，Qt layered window 原生穿透）；
+  地板 = 工作列上緣（跨平台 `availableGeometry` 算的）。設定存 registry
+  （`HKCU\Software\pixelomer\Shijima-Qt` 一帶），一般人不用碰——速度預設已是 2.5。
 - 打包：cp Shijima-Qt.app 骨架 + binary → `macdeployqt` → `codesign --force --deep -s -`
   - ⚠️ Makefile 的 `macapp` 目標把 macdeployqt 寫死成 MacPorts 路徑
     (`/opt/local/libexec/qt6/bin/macdeployqt`)，Homebrew 環境會失敗（binary 本身已編好）。

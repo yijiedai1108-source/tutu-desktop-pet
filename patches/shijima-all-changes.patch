@@ -131,7 +131,7 @@ index 2115764..ed063ae 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..894cba0 100644
+index 69f6778..86b8bf3 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -480,7 +480,15 @@ index 69f6778..894cba0 100644
  #include <exception>
  #include <filesystem>
  #include <iostream>
-@@ -752,6 +1090,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -34,6 +372,7 @@
+ #include <QFile>
+ #include <QDesktopServices>
+ #include <QScreen>
++#include <QSystemTrayIcon>
+ #include <QRandomGenerator>
+ #include "PlatformWidget.hpp"
+ #include "ShijimaLicensesDialog.hpp"
+@@ -752,6 +1091,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -507,7 +515,7 @@ index 69f6778..894cba0 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1147,331 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1148,350 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -650,6 +658,33 @@ index 69f6778..894cba0 100644
 +    }
 +}
 +
++// 系統通知（兔兔被視窗蓋住時也看得到）：macOS 走通知中心，其他平台走系統匣氣泡
++// （Windows 10/11 會顯示原生 toast）。
++void ShijimaManager::notify(QString const& message) {
++#if defined(__APPLE__)
++    QProcess::startDetached("osascript", { "-e",
++        QStringLiteral("display notification \"%1\" with title \"兔兔\"")
++            .arg(message) });
++#else
++    if (m_trayIcon == nullptr) {
++        QPixmap pix { 32, 32 };
++        pix.fill(Qt::transparent);
++        {
++            QPainter painter { &pix };
++            QFont f = painter.font();
++            f.setPixelSize(26);
++            painter.setFont(f);
++            painter.drawText(pix.rect(), Qt::AlignCenter,
++                QString::fromUtf8("🐰"));
++        }
++        m_trayIcon = new QSystemTrayIcon(QIcon { pix }, this);
++        m_trayIcon->setToolTip(QString::fromUtf8("兔兔"));
++        m_trayIcon->show();
++    }
++    m_trayIcon->showMessage(QString::fromUtf8("兔兔"), message);
++#endif
++}
++
 +void ShijimaManager::hungerTick() {
 +    m_hungerSeconds += 5.0 * m_hungerScale;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
@@ -675,9 +710,7 @@ index 69f6778..894cba0 100644
 +            try { mascot->mascot().next_behavior("Stretch"); }
 +            catch (...) {}
 +        }
-+        QProcess::startDetached("osascript", { "-e",
-+            QStringLiteral("display notification \"坐好久了，站起來動一動吧 🧘\" "
-+                "with title \"兔兔\"") });
++        notify(QString::fromUtf8("坐好久了，站起來動一動吧 🧘"));
 +    }
 +
 +    // 下班提醒：跨過下班時間那一刻提醒一次（預設 18:00，QSettings workday/end 可改）
@@ -687,9 +720,7 @@ index 69f6778..894cba0 100644
 +    if (endTime.isValid() && m_lastTickTime.isValid()
 +        && m_lastTickTime < endTime && nowTime >= endTime)
 +    {
-+        QProcess::startDetached("osascript", { "-e",
-+            QStringLiteral("display notification \"該下班了！辛苦一天了 🎉\" "
-+                "with title \"兔兔\"") });
++        notify(QString::fromUtf8("該下班了！辛苦一天了 🎉"));
 +        static_cast<SpeechBubble *>(m_speechBubble)->say(
 +            QString::fromUtf8("下班了！🎉"), 8000);
 +        m_celebrateUntilMs = QDateTime::currentMSecsSinceEpoch() + 20000;
@@ -815,14 +846,10 @@ index 69f6778..894cba0 100644
 +    }
 +    if (wantBubble != bubble->isVisible()) {
 +        if (wantBubble) {
-+            // 同步發 macOS 通知（兔兔被視窗蓋住時也看得到）
-+            QString msg = wantPudding
++            notify(wantPudding
 +                ? QStringLiteral("兔兔肚子餓哭哭中，點布丁餵牠 🍮")
 +                : QStringLiteral("該喝水囉！今日達成 %1%")
-+                    .arg((int)(m_waterMlToday / 2000.0 * 100));
-+            QProcess::startDetached("osascript", { "-e",
-+                QStringLiteral("display notification \"%1\" with title \"兔兔\"")
-+                    .arg(msg) });
++                    .arg((int)(m_waterMlToday / 2000.0 * 100)));
 +        }
 +        bubble->setVisible(wantBubble);
 +    }
@@ -839,7 +866,7 @@ index 69f6778..894cba0 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1497,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1517,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -894,20 +921,21 @@ index 69f6778..894cba0 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,6 +1563,12 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,6 +1583,13 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
 +    // 移動速度倍率（走/爬/跑/掉，全方向）；動畫維持自然。
 +    //   defaults write com.pixelomer.Shijima-Qt "mascot.speed" -float 2.5
-+    double moveSp = m_settings.value("mascot/speed", 1.0).toDouble();
++    // 預設 2.5 = 定案手感（Windows 沒有 defaults 指令，靠程式內預設值）。
++    double moveSp = m_settings.value("mascot/speed", 2.5).toDouble();
 +    if (moveSp < 0.2) { moveSp = 0.2; }
 +    if (moveSp > 3.5) { moveSp = 3.5; }   // 上限，太高會跨過邊界判定卡住
 +    env->speed_mult = moveSp;
      m_previousWindow = m_currentWindow;
  
      env->set_scale(1.0 / std::sqrt(m_userScale));
-@@ -1000,9 +1709,17 @@ void ShijimaManager::tick() {
+@@ -1000,9 +1730,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -926,7 +954,7 @@ index 69f6778..894cba0 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1076,6 +1793,15 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1814,15 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -943,7 +971,7 @@ index 69f6778..894cba0 100644
      QScreen *screen = mascotScreen();
      updateEnvironment(screen);
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..cf263fb 100644
+index 3fc6de4..af587a8 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -28,6 +28,7 @@
@@ -982,22 +1010,24 @@ index 3fc6de4..cf263fb 100644
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +111,8 @@ private:
+@@ -96,6 +111,9 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
 +    void hungerTick();
 +    void triggerCry(bool all);
++    void notify(QString const& message);
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +122,22 @@ private:
+@@ -105,6 +123,23 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
 +    int m_hungerTickTimer = -1;
 +    QWidget *m_puddingBubble = nullptr;
 +    QWidget *m_speechBubble = nullptr;
++    class QSystemTrayIcon *m_trayIcon = nullptr;
 +    double m_hungerSeconds = 0;
 +    double m_thirstSeconds = 0;
 +    int m_waterMlToday = 0;

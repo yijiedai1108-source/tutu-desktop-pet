@@ -1,0 +1,70 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'patches/**'
+      - '.github/workflows/build-windows.yml'
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone Shijima-Qt v0.1.0
+        run: |
+          git clone https://github.com/pixelomer/Shijima-Qt.git shijima
+          cd shijima
+          git checkout v0.1.0
+
+      - name: Apply patches
+        run: |
+          cd shijima
+          git apply ../patches/shijima-all-changes.patch
+          git submodule sync
+          git submodule update --init --recursive
+          cd libshijima
+          tail -n +2 ../../patches/libshijima-changes.patch | git apply -
+
+      - name: Cache Docker image
+        id: cache-docker
+        uses: actions/cache@v4
+        with:
+          path: shijima-qt-dev.tar.gz
+          key: docker-fedora-42-qt6-mingw
+
+      - name: Build Docker image
+        if: steps.cache-docker.outputs.cache-hit != 'true'
+        run: |
+          docker build -t shijima-qt-dev shijima/dev-docker
+          docker save shijima-qt-dev | gzip > shijima-qt-dev.tar.gz
+
+      - name: Import Docker image
+        if: steps.cache-docker.outputs.cache-hit == 'true'
+        run: |
+          gunzip -c < shijima-qt-dev.tar.gz | docker load
+
+      - name: Build Windows x86_64 release
+        run: |
+          cd shijima
+          docker run -e CONFIG=release -e CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+            --rm -v "$(pwd)":/work shijima-qt-dev bash -c \
+            'mingw64-make -j$(nproc)'
+          cp -r licenses publish/Windows/release/
+
+      - name: Bundle pack and instructions
+        run: |
+          mkdir -p bundle/tutu-windows
+          cp -r shijima/publish/Windows/release/. bundle/tutu-windows/
+          (cd packs && zip -qr ../bundle/tutu-windows/usagi-shimeji.zip usagi-shimeji)
+          cp docs/README-windows.txt bundle/tutu-windows/README-先看我.txt
+
+      - name: Archive Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tutu-windows-x86_64
+          path: bundle/tutu-windows
+          retention-days: 7
