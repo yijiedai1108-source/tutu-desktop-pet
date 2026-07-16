@@ -1,0 +1,11 @@
+# macOS 系統垃圾
+.DS_Store
+**/.DS_Store
+
+# 編譯好的引擎執行檔（建置產物，改由 GitHub Releases 提供）
+# 原始碼與建置方法見 patches/
+Shijima-Qt.app/
+
+# 打包好的素材成品包（deliverable，改由 Releases 提供）
+# 素材源檔在 packs/usagi-shimeji/
+packs/*.zip
