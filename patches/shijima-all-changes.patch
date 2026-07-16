@@ -15,10 +15,10 @@ index 5ca3ada..73aefc2 100644
  	path = cpp-httplib
  	url = https://github.com/yhirose/cpp-httplib
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..6f44c19 100644
+index 2115764..7bb7435 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
-@@ -25,6 +25,18 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+@@ -25,6 +25,24 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
  {
      QAction *action;
  
@@ -27,9 +27,15 @@ index 2115764..6f44c19 100644
 +        auto manager = ShijimaManager::defaultManager();
 +        action = addAction(manager->hungerStatusText());
 +        action->setEnabled(false);
++        action = addAction(manager->waterStatusText());
++        action->setEnabled(false);
 +        action = addAction("餵食 🥕");
 +        connect(action, &QAction::triggered, [this](){
 +            ShijimaManager::defaultManager()->feed(shijimaParent());
++        });
++        action = addAction("喝水 💧");
++        connect(action, &QAction::triggered, [this](){
++            ShijimaManager::defaultManager()->drink(shijimaParent());
 +        });
 +        addSeparator();
 +    }
@@ -38,14 +44,15 @@ index 2115764..6f44c19 100644
      {
          std::vector<std::string> behaviors;
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..7b7236f 100644
+index 69f6778..64c8bb3 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,6 +17,82 @@
+@@ -17,6 +17,113 @@
  // 
  
  #include "ShijimaManager.hpp"
 +#include <QDateTime>
++#include <QDate>
 +#include <QPainter>
 +#include <QMouseEvent>
 +#include <algorithm>
@@ -55,6 +62,15 @@ index 69f6778..7b7236f 100644
 +class PuddingBubble : public QWidget {
 +public:
 +    ShijimaWidget *target = nullptr;
++    void setMode(int mode) {
++        if (m_mode != mode) {
++            m_mode = mode;
++            update();
++        }
++    }
++private:
++    int m_mode = 0; // 0 布丁、1 水杯
++public:
 +    PuddingBubble(): QWidget(nullptr) {
 +        setAttribute(Qt::WA_TranslucentBackground);
 +        setAttribute(Qt::WA_NoSystemBackground);
@@ -86,7 +102,12 @@ index 69f6778..7b7236f 100644
 +        move(w->x() + w->width() / 2 - width() / 2, w->y() - height() + 10);
 +    }
 +    void mousePressEvent(QMouseEvent *) override {
-+        ShijimaManager::defaultManager()->feed(target);
++        if (m_mode == 1) {
++            ShijimaManager::defaultManager()->drink(target);
++        }
++        else {
++            ShijimaManager::defaultManager()->feed(target);
++        }
 +    }
 +    void paintEvent(QPaintEvent *) override {
 +        QPainter p(this);
@@ -99,6 +120,22 @@ index 69f6778..7b7236f 100644
 +        tail << QPointF(22, 44) << QPointF(38, 44) << QPointF(30, 62);
 +        p.drawPolygon(tail);
 +        p.drawRoundedRect(QRectF(2.5, 2.5, 55, 46), 13, 13);
++        if (m_mode == 1) {
++            // 水杯
++            QPolygonF cup;
++            cup << QPointF(21, 14) << QPointF(39, 14) << QPointF(36.5, 39) << QPointF(23.5, 39);
++            p.setPen(QPen(line, 2.2));
++            p.setBrush(Qt::white);
++            p.drawPolygon(cup);
++            QPolygonF water;
++            water << QPointF(22.4, 21) << QPointF(37.6, 21) << QPointF(36.2, 38) << QPointF(23.8, 38);
++            p.setPen(Qt::NoPen);
++            p.setBrush(QColor(0x96, 0xCD, 0xF5));
++            p.drawPolygon(water);
++            p.setBrush(QColor(0xFF, 0xF8, 0xE1));
++            p.drawEllipse(QRectF(25, 18, 3.5, 14));
++            return;
++        }
 +        // 布丁
 +        QPolygonF body;
 +        body << QPointF(19, 17) << QPointF(41, 17) << QPointF(46, 37) << QPointF(14, 37);
@@ -124,7 +161,7 @@ index 69f6778..7b7236f 100644
  #include <cmath>
  #include <exception>
  #include <filesystem>
-@@ -752,6 +828,14 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +859,17 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -134,12 +171,15 @@ index 69f6778..7b7236f 100644
 +        m_hungerScale = std::max(1.0, scale.toDouble());
 +    }
 +    m_hungerSeconds = m_settings.value("hunger/seconds", 0.0).toDouble();
++    m_thirstSeconds = m_settings.value("water/thirstSeconds", 0.0).toDouble();
++    m_waterMlToday = m_settings.value("water/mlToday", 0).toInt();
++    m_waterDate = m_settings.value("water/date", QString()).toString();
 +    m_hungerTickTimer = startTimer(5000);
 +    m_puddingBubble = new PuddingBubble();
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +873,75 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +907,123 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -185,6 +225,34 @@ index 69f6778..7b7236f 100644
 +    }
 +}
 +
++void ShijimaManager::drink(ShijimaWidget *widget) {
++    m_thirstSeconds = 0;
++    m_waterMlToday += 250;
++    m_settings.setValue("water/thirstSeconds", m_thirstSeconds);
++    m_settings.setValue("water/mlToday", m_waterMlToday);
++    if (m_puddingBubble != nullptr) {
++        m_puddingBubble->hide();
++    }
++    if (widget != nullptr && std::find(m_mascots.begin(), m_mascots.end(),
++            widget) == m_mascots.end()) {
++        widget = nullptr;
++    }
++    if (widget != nullptr) {
++        try { widget->mascot().next_behavior("Drink"); }
++        catch (...) {
++            try { widget->mascot().next_behavior("Happy"); }
++            catch (...) {}
++        }
++    }
++}
++
++QString ShijimaManager::waterStatusText() const {
++    if (m_waterMlToday >= 2000) {
++        return QStringLiteral("💧 今日 %1 ml，達標 ✅").arg(m_waterMlToday);
++    }
++    return QStringLiteral("💧 今日 %1 / 2000 ml").arg(m_waterMlToday);
++}
++
 +void ShijimaManager::triggerCry(bool all) {
 +    for (auto mascot : m_mascots) {
 +        try { mascot->mascot().next_behavior("Cry"); }
@@ -196,11 +264,31 @@ index 69f6778..7b7236f 100644
 +void ShijimaManager::hungerTick() {
 +    m_hungerSeconds += 5.0 * m_hungerScale;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
++    // 喝水：跨日歸零；未達標才累積口渴
++    QString today = QDate::currentDate().toString(Qt::ISODate);
++    if (m_waterDate != today) {
++        m_waterDate = today;
++        m_waterMlToday = 0;
++        m_thirstSeconds = 0;
++        m_settings.setValue("water/date", m_waterDate);
++        m_settings.setValue("water/mlToday", m_waterMlToday);
++    }
++    if (m_waterMlToday < 2000) {
++        m_thirstSeconds += 5.0 * m_hungerScale;
++        m_settings.setValue("water/thirstSeconds", m_thirstSeconds);
++    }
++
 +    auto state = hungerState();
-+    bool wantBubble = state == HungerState::Hungry && !m_mascots.empty()
++    bool wantPudding = state == HungerState::Hungry;
++    bool wantWater = m_thirstSeconds >= 60 * 60 && m_waterMlToday < 2000;
++    auto bubble = static_cast<PuddingBubble *>(m_puddingBubble);
++    bool wantBubble = (wantPudding || wantWater) && !m_mascots.empty()
 +        && !windowedMode();
-+    if (wantBubble != m_puddingBubble->isVisible()) {
-+        m_puddingBubble->setVisible(wantBubble);
++    if (wantBubble) {
++        bubble->setMode(wantPudding ? 0 : 1);
++    }
++    if (wantBubble != bubble->isVisible()) {
++        bubble->setVisible(wantBubble);
 +    }
 +    if (state == HungerState::Full || m_mascots.empty()) {
 +        return;
@@ -215,7 +303,7 @@ index 69f6778..7b7236f 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,8 +967,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,8 +1049,8 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -226,7 +314,7 @@ index 69f6778..7b7236f 100644
      if (taskbarHeight < 0) {
          taskbarHeight = 0;
      }
-@@ -828,7 +981,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -828,7 +1063,7 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          (double)geometry.left() };
      env->floor = { (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left(), (double)geometry.right() };
@@ -236,21 +324,23 @@ index 69f6778..7b7236f 100644
          (double)geometry.bottom() - taskbarHeight,
          (double)geometry.left() };
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..631dbcf 100644
+index 3fc6de4..f05a991 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
-@@ -62,6 +62,10 @@ public:
+@@ -62,6 +62,12 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
 +    enum class HungerState { Full, Peckish, Hungry };
 +    HungerState hungerState() const;
 +    QString hungerStatusText() const;
++    QString waterStatusText() const;
 +    void feed(ShijimaWidget *widget);
++    void drink(ShijimaWidget *widget);
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +100,8 @@ private:
+@@ -96,6 +102,8 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -259,13 +349,16 @@ index 3fc6de4..631dbcf 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +111,11 @@ private:
+@@ -105,6 +113,14 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
 +    int m_hungerTickTimer = -1;
 +    QWidget *m_puddingBubble = nullptr;
 +    double m_hungerSeconds = 0;
++    double m_thirstSeconds = 0;
++    int m_waterMlToday = 0;
++    QString m_waterDate;
 +    double m_hungerScale = 1.0;
 +    qint64 m_lastCryMs = 0;
      bool m_allowClose = false;
