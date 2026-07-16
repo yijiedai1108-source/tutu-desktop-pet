@@ -1,21 +1,25 @@
 # 🐰 兔兔桌寵（Usagi Desktop Pet）
 
-一隻住在你 macOS 桌面上的兔兔：會走路、爬牆、站在 Dock 上，肚子餓會哭哭討布丁，
-每 45 分鐘提醒你喝水，上班時間陪你打電腦，下班時間帶頭慶祝狂奔。
+一隻住在你桌面上的兔兔（macOS / Windows 都可以養）：會走路、爬牆、站在 Dock／工作列上，
+肚子餓會哭哭討布丁，每 45 分鐘提醒你喝水，上班時間陪你打電腦，下班時間帶頭慶祝狂奔。
 
 > ⚠️ 僅供朋友私下使用。兔兔素材為 nagano《ちいかわ》角色的同人加工，
 > **請不要公開散佈或上傳到公開平台**。引擎程式碼為 GPLv3 開源（見下方版權）。
 
 ---
 
-## 系統需求
+## 下載
 
-- Apple Silicon 的 Mac（M1 以上）
-- macOS 15 或更新
+到 [Releases](https://github.com/yijiedai1108-source/tutu-desktop-pet/releases) 頁面下載對應平台的包：
 
-## 安裝（三分鐘）
+| 平台 | 檔案 | 需求 |
+|---|---|---|
+| macOS | `tutu-desktop-pet.zip` | Apple Silicon（M1 以上）、macOS 15+ |
+| Windows | `tutu-windows-x86_64.zip` | Windows 10 / 11（64 位元） |
 
-1. 下載並解壓縮發佈包，會拿到兩個東西：
+## 安裝：macOS（三分鐘）
+
+1. 解壓縮發佈包，會拿到兩個東西：
    - `Shijima-Qt.app` — 桌寵引擎（改造版）
    - `usagi-shimeji-v2.zip` — 兔兔素材包（**不要解壓縮**）
 2. 打開 `Shijima-Qt.app`。macOS 會說「無法驗證開發者」——
@@ -27,11 +31,21 @@
    兔兔才能站在你的視窗頂端。
 6. （建議）第一次出現通知詢問時按「允許」，喝水/下班提醒才收得到。
 
+## 安裝：Windows（三分鐘）
+
+1. 把 zip **整個資料夾**解壓縮到任意位置（所有 DLL 要跟 `shijima-qt.exe` 放在一起）。
+2. 雙擊 `shijima-qt.exe`。第一次開啟 SmartScreen 可能跳「Windows 已保護您的電腦」——
+   點「**其他資訊**」→「**仍要執行**」。原因同上：沒有付費簽名，程式開源可查。
+3. 把資料夾裡的 `usagi-shimeji.zip` **直接拖進** Shijima 的視窗完成匯入。
+4. 在清單中**雙擊 Usagi**，兔兔就出現在桌面上了。
+5. 提醒通知走系統匣的 🐰 圖示（原生 toast），不用額外設定；
+   若沒看到通知，檢查「設定 → 系統 → 通知」有沒有整體關閉。
+
 ## 功能一覽
 
 | 功能 | 說明 |
 |---|---|
-| 🚶 日常 | 亂走、發呆、坐下、睡覺、爬牆、爬天花板、站 Dock、拖曳丟擲 |
+| 🚶 日常 | 亂走、發呆、坐下、睡覺、爬牆、爬天花板、站 Dock／工作列、拖曳丟擲 |
 | 🍮 肚子餓 | 2 小時沒餵會哭哭，頭上冒出**想吃的食物**對話框（從已解鎖菜單隨機點菜，泡泡直接畫該道菜的圖案），點泡泡選菜餵食；**餵中牠想吃的那道**會冒 ❤️ 並額外加好感度 |
 | 💧 喝水提醒 | 每 45 分鐘冒**水杯對話框**提醒你喝水，點擊選水量（100/250/500ml），杯中水位＝今日達成率，日標 2000ml 達標後當天不再吵 |
 | 🧘 久坐提醒 | 每 50 分鐘通知＋兔兔做伸展操 |
@@ -48,7 +62,10 @@
 - **Behaviors**：手動觸發任何動作（想看打電腦選 Work、伸展選 Stretch）
 - **Dismiss**：收掉兔兔
 
-## 自訂設定（終端機指令，改完重開 app）
+## 自訂設定
+
+Windows 版開箱即是調校好的預設值（含移動速度），一般不需要調；
+想改下班時間之類的進階設定找飼育員。macOS 用終端機指令（改完重開 app）：
 
 ```bash
 # 下班時間（預設 18:00）
@@ -64,12 +81,18 @@ defaults write com.pixelomer.Shijima-Qt "affection.points" -int 0
 想快速體驗全部功能（時間加速 60 倍，2 小時變 2 分鐘）：
 
 ```bash
+# macOS（終端機）
 SHIJIMA_HUNGER_SCALE=60 /Applications/Shijima-Qt.app/Contents/MacOS/shijima-qt
+```
+
+```bat
+:: Windows（在解壓縮資料夾開 cmd）
+set "SHIJIMA_HUNGER_SCALE=60" && shijima-qt.exe
 ```
 
 ## 開機自動啟動（可選）
 
-把 `launchagent/com.pixelomer.ShijimaQt.plist` 裡的路徑改成你的 app 實際位置，然後：
+**macOS**：把 `launchagent/com.pixelomer.ShijimaQt.plist` 裡的路徑改成你的 app 實際位置，然後：
 
 ```bash
 cp launchagent/com.pixelomer.ShijimaQt.plist ~/Library/LaunchAgents/
@@ -77,16 +100,22 @@ cp launchagent/com.pixelomer.ShijimaQt.plist ~/Library/LaunchAgents/
 
 反悔就刪掉那個檔案。
 
+**Windows**：按 `Win + R` 輸入 `shell:startup` 打開啟動資料夾，
+把 `shijima-qt.exe` 的**捷徑**（右鍵 → 建立捷徑）丟進去。反悔就刪掉捷徑。
+
 ## FAQ
 
 - **兔兔越生越多？** 這是 Shimeji 傳統藝能（分裂＋拔蘿蔔），右鍵 → Dismiss all but one。
-- **通知沒出現？** 系統設定 → 通知 → 找「Script Editor／工序指令編寫程式」→ 允許。
-- **兔兔站不上視窗？** 檢查輔助使用權限（見安裝第 5 步）。
-- **Intel Mac 能玩嗎？** 這個包只編了 Apple Silicon 版，需要的話可以照 `patches/README.md` 自己編。
+- **通知沒出現？（macOS）** 系統設定 → 通知 → 找「Script Editor／工序指令編寫程式」→ 允許。
+- **通知沒出現？（Windows）** 設定 → 系統 → 通知 → 確認通知整體開啟；toast 由系統匣的 🐰 圖示發出。
+- **兔兔站不上視窗？（macOS）** 檢查輔助使用權限（見 macOS 安裝第 5 步）。Windows 不需要額外權限。
+- **Intel Mac 能玩嗎？** 現成包只編了 Apple Silicon 版，需要的話可以照 `patches/README.md` 自己編。
+- **Windows 版怪怪的？** Windows 版較新、實測較少（通知、速度手感尤其想聽回饋），遇到問題回報給飼育員。
 
 ## 版權與致謝
 
 - 引擎基於 [pixelomer/Shijima-Qt](https://github.com/pixelomer/Shijima-Qt)（GPLv3）改造，
-  修改內容與建置方法見 `patches/`；本 fork 同樣以 GPLv3 授權，原始碼都在這個 repo。
+  修改內容與建置方法見 `patches/`（Windows 版由 GitHub Actions 自動建置，見 `.github/workflows/`）；
+  本 fork 同樣以 GPLv3 授權，原始碼都在這個 repo。
 - 兔兔素材源自網路同人 Shimeji 素材（原角色 © nagano／《ちいかわ》），
   經本專案加工（表情、食物、動作幀）。**僅限私人使用，請勿公開散佈。**
