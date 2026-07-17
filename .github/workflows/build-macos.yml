@@ -30,6 +30,10 @@ jobs:
           git submodule update --init --recursive
           cd libshijima
           tail -n +2 ../../patches/libshijima-changes.patch | git apply -
+          # Makefile 的 macapp 目標寫死 MacPorts 的 macdeployqt 路徑。
+          # 一定要在 build 前改：Makefile mtime 變動會讓 make 重新連結。
+          cd ..
+          sed -i '' 's|/opt/local/libexec/qt6/bin/macdeployqt|/opt/homebrew/opt/qt/bin/macdeployqt|' Makefile
 
       - name: Install dependencies
         run: brew install qt libarchive pkgconf cmake
@@ -48,11 +52,12 @@ jobs:
       - name: Package .app
         env:
           MACOSX_DEPLOYMENT_TARGET: '15.0'
+          PKG_CONFIG_PATH: /opt/homebrew/opt/libarchive/lib/pkgconfig
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
         run: |
           cd shijima
-          # Makefile 的 macapp 目標寫死 MacPorts 的 macdeployqt 路徑
-          sed -i '' 's|/opt/local/libexec/qt6/bin/macdeployqt|/opt/homebrew/opt/qt/bin/macdeployqt|' Makefile
-          CONFIG=release make macapp QT_MACOS_PATH=/opt/homebrew/opt/qt/lib
+          CONFIG=release make macapp QT_MACOS_PATH=/opt/homebrew/opt/qt/lib \
+            CONFIG_LDFLAGS="-flto -Wl,-headerpad_max_install_names"
           # CI 先 ad-hoc 簽讓 bundle 完整；發佈前要在本機重簽 tutu-dev（見 patches/README.md）
           codesign --force --deep -s - publish/macOS/release/Shijima-Qt.app
 
