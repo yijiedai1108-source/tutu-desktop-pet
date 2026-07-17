@@ -1,0 +1,93 @@
+name: Build macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'patches/**'
+      - '.github/workflows/build-macos.yml'
+
+jobs:
+  build-macos:
+    # macos-15 runner（arm64）：Homebrew bottle 與產出 binary 的 minos 都是 15，
+    # macOS 15 (Sequoia) 以上都能跑。在本機（macOS 26）打包會把最低需求標成 26。
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone Shijima-Qt v0.1.0
+        run: |
+          git clone https://github.com/pixelomer/Shijima-Qt.git shijima
+          cd shijima
+          git checkout v0.1.0
+
+      - name: Apply patches
+        run: |
+          cd shijima
+          git apply ../patches/shijima-all-changes.patch
+          git submodule sync
+          git submodule update --init --recursive
+          cd libshijima
+          tail -n +2 ../../patches/libshijima-changes.patch | git apply -
+
+      - name: Install dependencies
+        run: brew install qt libarchive pkgconf cmake
+
+      - name: Build release (arm64)
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '15.0'
+          PKG_CONFIG_PATH: /opt/homebrew/opt/libarchive/lib/pkgconfig
+          CMAKE_POLICY_VERSION_MINIMUM: '3.5'
+        run: |
+          cd shijima
+          CONFIG=release make -j"$(sysctl -n hw.ncpu)" \
+            QT_MACOS_PATH=/opt/homebrew/opt/qt/lib \
+            CONFIG_LDFLAGS="-flto -Wl,-headerpad_max_install_names"
+
+      - name: Package .app
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '15.0'
+        run: |
+          cd shijima
+          # Makefile 的 macapp 目標寫死 MacPorts 的 macdeployqt 路徑
+          sed -i '' 's|/opt/local/libexec/qt6/bin/macdeployqt|/opt/homebrew/opt/qt/bin/macdeployqt|' Makefile
+          CONFIG=release make macapp QT_MACOS_PATH=/opt/homebrew/opt/qt/lib
+          # CI 先 ad-hoc 簽讓 bundle 完整；發佈前要在本機重簽 tutu-dev（見 patches/README.md）
+          codesign --force --deep -s - publish/macOS/release/Shijima-Qt.app
+
+      - name: Verify minimum macOS version (must be <= 15)
+        run: |
+          app=shijima/publish/macOS/release/Shijima-Qt.app
+          otool -l "$app/Contents/MacOS/shijima-qt" | grep -A4 LC_BUILD_VERSION
+          bad=0
+          find "$app" -type f | while read -r f; do
+            file -b "$f" | grep -q 'Mach-O' || continue
+            v=$(otool -l "$f" | awk '/minos/{print $2; exit}')
+            [ -n "$v" ] || continue
+            major=${v%%.*}
+            if [ "$major" -gt 15 ]; then
+              echo "minos too new: $f ($v)"
+              echo "$f" >> /tmp/minos-violations
+            fi
+          done
+          if [ -s /tmp/minos-violations ]; then
+            echo '::error::app 內有 Mach-O 最低系統需求高於 macOS 15'
+            exit 1
+          fi
+
+      - name: Bundle pack and manual
+        run: |
+          mkdir -p bundle/tutu-desktop-pet
+          cp -R shijima/publish/macOS/release/Shijima-Qt.app bundle/tutu-desktop-pet/
+          (cd packs && zip -qr ../bundle/tutu-desktop-pet/usagi-shimeji-v3.zip usagi-shimeji)
+          cp docs/使用手冊-mac.md bundle/tutu-desktop-pet/使用手冊.md
+          # upload-artifact 不保留 symlink / 執行權限，先用 ditto 自壓一層
+          (cd bundle && ditto -c -k --keepParent tutu-desktop-pet tutu-desktop-pet.zip)
+
+      - name: Archive macOS build
+        uses: actions/upload-artifact@v4
+        with:
+          name: tutu-macos-arm64
+          path: bundle/tutu-desktop-pet.zip
+          retention-days: 7

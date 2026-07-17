@@ -79,7 +79,16 @@
   Windows 不需要遮罩/點擊穿透 patch（`useWindowMasks()` 回 false，Qt layered window 原生穿透）；
   地板 = 工作列上緣（跨平台 `availableGeometry` 算的）。設定存 registry
   （`HKCU\Software\pixelomer\Shijima-Qt` 一帶），一般人不用碰——速度預設已是 2.5。
-- 打包：cp Shijima-Qt.app 骨架 + binary → `macdeployqt` → `codesign --force --deep -s tutu-dev`
+- 建置（macOS arm64，**發佈給別人用這個**）：**用 GitHub Actions**（`.github/workflows/build-macos.yml`，
+  手動 dispatch 或改動 `patches/**` 推上 main 自動觸發）。跑在 `macos-15` runner 上，
+  產出的 app 最低需求是 **macOS 15**——在本機（macOS 26）打包會把 minos 標成 26，
+  macOS 15/Sequoia 的人會「無法打開」（2026-07-17 朋友 M1 15.5 實際踩到）。
+  workflow 內建 minos 檢查，任何 Mach-O 高於 15 會直接 fail。
+  - 發佈流程：CI artifact `tutu-macos-arm64`（內含 `tutu-desktop-pet.zip`）→ 本機解壓 →
+    `codesign --force --deep -s tutu-dev Shijima-Qt.app`（CI 只有 ad-hoc，一定要重簽）→
+    `ditto -c -k --keepParent tutu-desktop-pet tutu-desktop-pet.zip` 重壓 → `gh release upload`。
+    ⚠️ 壓 .app 一律用 `ditto`（保 symlink / 執行權限），別用 Finder 或 `zip -r` 以外亂搞。
+- 打包（本機自用）：cp Shijima-Qt.app 骨架 + binary → `macdeployqt` → `codesign --force --deep -s tutu-dev`
   - ⚠️ **一定用 `tutu-dev` 簽，不要 ad-hoc（`-s -`）**：macOS 的 TCC（輔助使用等權限）認簽章身分，
     ad-hoc 每次重建指紋都變 → 權限失效、每次啟動都重新要求授權。`tutu-dev` 是本機自簽憑證
     （在使用者 login keychain，2026-07-17 建，效期 10 年），身分固定、授權一次永久有效。
