@@ -58,7 +58,8 @@ jobs:
         run: |
           mkdir -p bundle/tutu-windows
           cp -r shijima/publish/Windows/release/. bundle/tutu-windows/
-          (cd packs && zip -qr ../bundle/tutu-windows/usagi-shimeji.zip usagi-shimeji)
+          # zip 頂層資料夾一定要叫 Usagi（原因見 build-macos.yml 同段註解）
+          (cd packs && cp -r usagi-shimeji Usagi && zip -qr ../bundle/tutu-windows/usagi-shimeji.zip Usagi && rm -rf Usagi)
           cp docs/README-windows.txt bundle/tutu-windows/README-先看我.txt
 
       - name: Archive Windows build
