@@ -9,11 +9,14 @@
   - `libshijima-changes.patch` — **submodule `libshijima` 的改動**（速度倍率，見下）。主 repo 的 patch
     抓不到 submodule，需在 `git submodule update` 之後、進到 `libshijima/` 目錄單獨套用
     （檔頭第一行是 base commit 註解，用 `tail -n +2 libshijima-changes.patch | git apply -` 套）。
-- 地板角落不裁切（`ShijimaWidget::updateOffsets`）：引擎原本會把「超出螢幕的幀」往螢幕外偏移繪製、
-  讓超出部分被裁（地板走到角落身體被切一小條）。改成**只有站/走在地板上（`env->floor.is_on(anchor)`）
-  且非拖曳時**，把該幀整個推回螢幕內（身體完整、邊緣抵住牆），只動水平方向。
-  **爬牆(在 work_area 牆上)與天花板維持原本邏輯**——原本的往外偏移正是讓爬牆幀左側透明留白推出螢幕、
-  身體剛好落在螢幕邊的關鍵，所以爬牆仍貼真邊。拖曳時也維持原狀（跟游標、可移出邊緣去別的螢幕）。垂直方向不變。
+- 地板角落不裁切（`ShijimaWidget::updateOffsets`，2026-07-17 重寫為**內容夾限**）：
+  引擎原本會把「超出螢幕的幀」往螢幕外偏移繪製、讓超出部分被裁。第一版修法用
+  `floor.is_on(anchor)` 二元判斷「地板幀整張推回、爬牆幀走上游偏移」——**踩雷**：
+  爬牆動作前 16 tick 錨點還黏在地板線上（`is_on` 判 ±1px）會誤判，兔兔先在離邊
+  ~60px 處「爬隱形牆」約 0.6 秒再瞬移貼邊。現版改成：上游偏移照算，最後只把
+  「**不透明內容**（`asset.offset()` 的裁切框）被螢幕邊裁掉的量」推回——地板幀身體
+  完整抵邊、爬牆幀只推 1px 內貼真邊、過渡連續無瞬移，不再需要判斷在不在地板。
+  拖曳維持原狀（跟游標、可拖出邊緣）。垂直方向不變。
 - 左右牆內縮（`ShijimaManager::updateEnvironment`）：可選的額外內縮，把 workArea / floor / ceiling
   左右邊往內移。**預設 0**（貼真邊；裁切已由上面 render 修法處理）。只縮「外緣」——
   某側若有相鄰螢幕（可把兔兔拖過去）則不縮該側。要讓兔兔離邊遠一點可用 defaults 微調（改完重開 app）：
@@ -39,6 +42,11 @@
     發生在兔兔**下一個 tick**，找不到會丟 `logic_error`——該 throw 不在呼叫端 try/catch 內，會讓整個
     app `abort`。所以名字一定要是引擎實際存在的（別用 pack 的日文原名，會被 translator 改掉）。
   - 保險：`ShijimaManager` tick loop 的 `shimeji->tick()` 已包 try/catch，任何行為例外都不會再讓 app abort。
+  - ⚠️ 大雷二號（2026-07-17，朋友實測踩到）：上游 `manager::activate_queued_behavior` 是
+    「先 `_next_behavior(name)` 再清空 queued」——找不到名字丟例外時**queued 永遠清不掉**，
+    之後每 tick 重丟 → 該兔永久定格（app 不死，tick catch 只印 stderr）。觸發鏈：素材包匯入 bug
+    → 朋友跑引擎預設 XML（沒有我們的 Cry/Drink/Happy/Stretch）→ 放置 2 小時肚子餓 →
+    `next_behavior("Cry")` → 凍死。**libshijima patch 已修**：先複製並清空再執行，壞名字只丟一次。
 - 手動觸發下班狂奔：右鍵選單加了「🎉 下班狂奔（20 秒）」→ `ShijimaManager::startCelebration()`
   （設 `m_celebrateUntilMs`），不用等到下班時間也能測試/炫耀。
 - 移動速度倍率（**libshijima patch**：`animation.cc` 走/爬 + `fall.cc` 掉落，乘 `env->speed_mult`；

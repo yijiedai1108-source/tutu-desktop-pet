@@ -1288,7 +1288,7 @@ index 3fc6de4..17ee769 100644
      bool m_firstShow = true;
      bool m_wasVisible = false;
 diff --git a/ShijimaWidget.cc b/ShijimaWidget.cc
-index 295a4e4..f901629 100644
+index 295a4e4..0688f4a 100644
 --- a/ShijimaWidget.cc
 +++ b/ShijimaWidget.cc
 @@ -19,6 +19,7 @@
@@ -1358,27 +1358,28 @@ index 295a4e4..f901629 100644
          }
      }
  #endif
-@@ -179,12 +205,18 @@ bool ShijimaWidget::updateOffsets() {
-         - (int)env()->screen.left;
-     int winY = (int)m_mascot->state->anchor.y - m_anchorInWindow.y()
-         - (int)env()->screen.top;
-+    // 只有「站/走在地板上」且非拖曳時，才把會超出螢幕的幀整個推回螢幕內
-+    // （身體完整、邊緣抵住牆，而不是被螢幕邊切掉）。爬牆(在 work_area 牆上)與
-+    // 天花板走原本邏輯——原本的往外偏移正是讓爬牆幀貼到真邊的關鍵，不能動。
-+    // 拖曳時也維持原狀（跟游標、可移出邊緣去別的螢幕）。只影響水平方向。
-+    bool pushInsideX = env()->floor.is_on(m_mascot->state->anchor)
-+        && !m_mascot->state->dragging;
-     if (winX < 0) {
--        drawOffset.setX(winX);
-+        if (!pushInsideX) { drawOffset.setX(winX); }
-         winX = 0;
+@@ -206,6 +232,21 @@ bool ShijimaWidget::updateOffsets() {
+     else {
+         drawOffset += asset.offset().topLeft() / scale;
      }
-     else if (winX + windowWidth > screenWidth) {
--        drawOffset.setX(winX - screenWidth + windowWidth);
-+        if (!pushInsideX) { drawOffset.setX(winX - screenWidth + windowWidth); }
-         winX = screenWidth - windowWidth;
-     }
-     if (winY < 0) {
++    // 水平內容夾限（防邊緣裁切）：只把「不透明內容」被螢幕邊裁掉的量推回來。
++    // 舊做法用 floor.is_on 二元判斷「地板幀整張推回、其他走上游偏移」——爬牆起步的
++    // 前 16 tick 錨點還黏在地板線上會誤判，兔兔先在離邊 ~60px 處爬隱形牆再瞬移貼邊。
++    // 內容夾限對地板幀＝身體完整抵邊（原本的目的）、對爬牆幀＝只推 1px 內（貼真邊）、
++    // 過渡連續無瞬移。視窗完全在螢幕內時內容本來就在視窗內，這段自然不動作。
++    // 拖曳維持原狀（跟游標、可拖出邊緣去別的螢幕）。垂直方向維持上游。
++    if (!m_mascot->state->dragging) {
++        int contentW = (int)(asset.image(false).width() / scale);
++        if (drawOffset.x() < 0) {
++            drawOffset.setX(0);
++        }
++        else if (drawOffset.x() + contentW > windowWidth) {
++            drawOffset.setX(windowWidth - contentW);
++        }
++    }
+     if (drawOffset != m_drawOrigin) {
+         needsRepaint = true;
+         m_drawOrigin = drawOffset;
 diff --git a/ShijimaWidget.hpp b/ShijimaWidget.hpp
 index f0a2985..c7a47c0 100644
 --- a/ShijimaWidget.hpp

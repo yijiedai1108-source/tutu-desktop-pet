@@ -44,3 +44,29 @@ index e145f97..7a3a86a 100644
  
      // [0.0, 1.0)
      double random() {
+diff --git a/shijima/mascot/manager.cc b/shijima/mascot/manager.cc
+index a8a4647..87200e5 100644
+--- a/shijima/mascot/manager.cc
++++ b/shijima/mascot/manager.cc
+@@ -150,7 +150,12 @@ bool manager::has_queued_behavior() {
+ void manager::activate_queued_behavior() {
+     if (has_queued_behavior()) {
+         state->next_subtick = 0;
+-        auto &behavior = state->queued_behavior;
++        // 先複製並清空 queued_behavior 再執行：_next_behavior 找不到名字會丟
++        // logic_error，若清空放在後面，壞名字永遠留在佇列 → 每 tick 重丟 →
++        // 該 mascot 永久定格（外層 catch 只保 app 不死）。先清空則只丟一次，
++        // mascot 維持原行為繼續動。
++        auto behavior = state->queued_behavior;
++        state->queued_behavior = "";
+         if (state->interaction.available() && !state->interaction.started &&
+             state->interaction.behavior() == behavior)
+         {
+@@ -158,7 +163,6 @@ void manager::activate_queued_behavior() {
+             state->interaction.started = true;
+         }
+         _next_behavior(behavior);
+-        behavior = "";
+     }
+ }
+ 
