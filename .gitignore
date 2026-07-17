@@ -13,3 +13,4 @@ packs/*.zip
 # 內部工作筆記 / 設計 spec，不進版控
 docs/session-*.md
 docs/superpowers/
+mp3/

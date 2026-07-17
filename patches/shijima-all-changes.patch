@@ -140,22 +140,24 @@ index ad712f5..54194f2 100644
  
  }
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..029fbdc 100644
+index 2115764..8d203bb 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
-@@ -19,12 +19,47 @@
+@@ -19,14 +19,119 @@
  #include "ShijimaContextMenu.hpp"
  #include "ShijimaWidget.hpp"
  #include "ShijimaManager.hpp"
 +#include <utility>
++#include <map>
  
  ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
      : QMenu("Context menu", parent)
  {
      QAction *action;
  
+-    // Behaviors menu   
 +    // 養成：狀態顯示＋餵食
-+    {
+     {
 +        auto manager = ShijimaManager::defaultManager();
 +        action = addAction(manager->hungerStatusText());
 +        action->setEnabled(false);
@@ -188,10 +190,95 @@ index 2115764..029fbdc 100644
 +        addSeparator();
 +    }
 +
-     // Behaviors menu   
-     {
++    // Behaviors menu（顯示中文，觸發仍用引擎英文名；沒對照到的名字原樣顯示）
++    {
++        static const std::map<std::string, const char *> zhNames = {
++            { "ChaseMouse", "追滑鼠" },
++            { "ClimbAlongCeiling", "爬天花板" },
++            { "ClimbAlongWall", "爬牆" },
++            { "ClimbHalfwayAlongWall", "爬到牆一半" },
++            { "ClimbIEBottom", "沿視窗底邊爬" },
++            { "ClimbIEWall", "爬視窗邊" },
++            { "CrawlAlongIECeiling", "在視窗頂匍匐" },
++            { "CrawlAlongWorkAreaFloor", "貼地爬行" },
++            { "Cry", "哭哭（肚子餓）" },
++            { "Divided", "分裂完成" },
++            { "Dragged", "被拖曳" },
++            { "Drink", "喝水" },
++            { "Eat", "吃布丁" },
++            { "EatALaMode", "吃布丁阿拉摩德" },
++            { "EatCake", "吃草莓蛋糕" },
++            { "EatOnigiri", "吃飯糰" },
++            { "EatRamen", "吃郎拉麵" },
++            { "Fall", "掉落" },
++            { "FallFromCeiling", "從天花板跳下" },
++            { "FallFromWall", "從牆上跳下" },
++            { "GrabIEBottomLeftWall", "抓視窗左下緣" },
++            { "GrabIEBottomRightWall", "抓視窗右下緣" },
++            { "GrabWorkAreaBottomLeftWall", "抓住左牆" },
++            { "GrabWorkAreaBottomRightWall", "抓住右牆" },
++            { "Happy", "開心" },
++            { "HoldOntoCeiling", "掛在天花板發呆" },
++            { "HoldOntoIEWall", "掛在視窗邊發呆" },
++            { "HoldOntoWall", "掛在牆上發呆" },
++            { "JumpFromBottomOfIE", "從視窗底跳下" },
++            { "JumpFromLeftEdgeOfIE", "從視窗左緣跳下" },
++            { "JumpFromLeftWall", "從左牆跳開" },
++            { "JumpFromRightEdgeOfIE", "從視窗右緣跳下" },
++            { "JumpFromRightWall", "從右牆跳開" },
++            { "JumpOnIELeftWall", "跳上視窗左緣" },
++            { "JumpOnIERightWall", "跳上視窗右緣" },
++            { "LieDown", "趴著發呆" },
++            { "PullUp", "拔蘿蔔（拉出新兔兔）" },
++            { "PullUpShimeji", "被拔出來" },
++            { "RunAlongIECeiling", "在視窗頂狂奔" },
++            { "RunAlongWorkAreaFloor", "沿地板狂奔" },
++            { "SitAndFaceMouse", "坐著盯滑鼠" },
++            { "SitAndSpinHead", "坐著轉頭" },
++            { "SitDown", "坐下" },
++            { "SitOnTheLeftEdgeOfIE", "坐在視窗左上角" },
++            { "SitOnTheRightEdgeOfIE", "坐在視窗右上角" },
++            { "SitWhileDanglingLegs", "坐著晃腳" },
++            { "SplitIntoTwo", "分裂成兩隻" },
++            { "StandUp", "站著發呆" },
++            { "Stretch", "伸展操" },
++            { "ThrowIEFromLeft", "從左邊推視窗" },
++            { "ThrowIEFromRight", "從右邊推視窗" },
++            { "Thrown", "被丟出去" },
++            { "WalkAlongIECeiling", "在視窗頂散步" },
++            { "WalkAlongWorkAreaFloor", "沿地板散步" },
++            { "WalkAndGrabBottomLeftWall", "走去爬左牆" },
++            { "WalkAndGrabBottomRightWall", "走去爬右牆" },
++            { "WalkAndThrowIEFromLeft", "走去從左推視窗" },
++            { "WalkAndThrowIEFromRight", "走去從右推視窗" },
++            { "WalkLeftAlongFloorAndSit", "往左走到底坐下" },
++            { "WalkLeftAlongIEAndJump", "沿視窗頂往左走跳下" },
++            { "WalkLeftAlongIEAndSit", "沿視窗頂往左走坐下" },
++            { "WalkLeftAndSit", "往左走一段坐下" },
++            { "WalkRightAlongFloorAndSit", "往右走到底坐下" },
++            { "WalkRightAlongIEAndJump", "沿視窗頂往右走跳下" },
++            { "WalkRightAlongIEAndSit", "沿視窗頂往右走坐下" },
++            { "WalkRightAndSit", "往右走一段坐下" },
++            { "Work", "打電腦" },
++        };
          std::vector<std::string> behaviors;
-@@ -44,6 +79,34 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+         auto &list = parent->m_mascot->initial_behavior_list();
+         auto flat = list.flatten_unconditional();
+@@ -35,15 +140,46 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+                 behaviors.push_back(behavior->name);
+             }
+         }
+-        auto behaviorsMenu = addMenu("Behaviors");
++        auto behaviorsMenu = addMenu(QString::fromUtf8("動作"));
+         for (std::string &behavior : behaviors) {
+-            action = behaviorsMenu->addAction(QString::fromStdString(behavior));
++            auto it = zhNames.find(behavior);
++            action = behaviorsMenu->addAction(it != zhNames.end()
++                ? QString::fromUtf8(it->second)
++                : QString::fromStdString(behavior));
+             connect(action, &QAction::triggered, [this, behavior](){
+                 shijimaParent()->m_mascot->next_behavior(behavior);
+             });
          }
      }
  

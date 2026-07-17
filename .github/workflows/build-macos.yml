@@ -88,7 +88,7 @@ jobs:
           # zip 頂層資料夾一定要叫 Usagi、conf 用英文檔名（actions/behaviors.xml）——
           # 匯入器（libshimejifinder）靠 conf/actions.xml 判斷路徑，日文檔名會落到
           # 「只解圖」的備援路徑：沒聲音、名字變 img（v1.4 實際踩到）
-          (cd packs && cp -r usagi-shimeji Usagi && zip -qr ../bundle/tutu-desktop-pet/usagi-shimeji-v4.zip Usagi && rm -rf Usagi)
+          (cd packs && cp -r usagi-shimeji Usagi && zip -qr ../bundle/tutu-desktop-pet/usagi-shimeji-v5.zip Usagi && rm -rf Usagi)
           cp docs/使用手冊-mac.md bundle/tutu-desktop-pet/使用手冊.md
           # upload-artifact 不保留 symlink / 執行權限，先用 ditto 自壓一層
           (cd bundle && ditto -c -k --keepParent tutu-desktop-pet tutu-desktop-pet.zip)
