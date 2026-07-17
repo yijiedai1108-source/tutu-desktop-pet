@@ -60,7 +60,9 @@
     下班狂奔開場（自動+手動，統一走 `startCelebration()`）→`celebrate.wav`。
   - 右鍵選單「🔊 兔兔叫聲」開關 = QSettings `sound/enabled`（預設開）。
   - 測試鉤子：`SHIJIMA_TEST_SHOUT=1` 讓吶喊約 15 秒一次（平常十幾分鐘），驗證泡泡字↔叫聲對應用。
-- 番茄鐘巨兔（2026-07-17 加）：工作 25 分鐘 → 全部兔兔放大到約半個螢幕高 5 分鐘提醒休息 →
+- 番茄鐘巨兔（2026-07-17 加）：工作 25 分鐘 → 全部兔兔放大到約 **1/3 螢幕高** 5 分鐘提醒休息 →
+  （原定半螢幕高＝4.3 倍，2026-07-17 當天翻案：128px 素材放 4 倍太糊，先降 1/3 高仍不滿意，
+  最終解法 = 1/3 高 + AI 高清素材，見下面「高清變體」）→
   自動縮回重計。變大是在 `updateEnvironment` 每 tick 從 `pomodoroBreakActive()` **推導** env scale
   （目標像素 = 螢幕高 × 0.5，反推 `set_scale(128/目標)`，繞過 userScale 的平方根換算）——
   不是改狀態再還原，所以結束路徑（自動/跳過/關開關）只需清 `m_breakUntilMs`，不可能卡永久巨兔。
@@ -70,6 +72,17 @@
   defaults write com.pixelomer.Shijima-Qt "pomodoro.giantScale" -float 5   # 128px 的幾倍（未設＝半螢幕高）
   ```
   測試鉤子 `SHIJIMA_TEST_POMODORO=1`（40 秒工作/15 秒休息）。
+- 高清變體（2026-07-17 加，配合巨兔）：`img/hd-<原名>.png`（512px，Real-ESRGAN
+  `realesrgan-x4plus-anime` 模型放大）。`AssetLoader` 載入素材時自動找同名 `hd-` 檔，
+  `ShijimaWidget::paintEvent` 在**放大顯示**（drawScale<1）且有高清變體時改畫高清圖——
+  512 下採樣到 369 銳利，128 上採樣才糊。物理/遮罩/動作 XML 全部不動（座標系統零風險）。
+  ⚠️ `Asset::setHdImage` 沿用**基準圖的裁切框**等比裁切，不能重算高清圖自己的
+  不透明邊界（AI 邊緣會暈開幾 px，重算會對不齊）。縮放繪製一律開 `SmoothPixmapTransform`。
+  libshimejifinder 的 `extractAll(img,"png")` 會把 img/ 全部 png 原樣搬進 .mascot/img/
+  （不看 XML 有沒有引用），所以 hd- 檔跟著素材包 zip 散佈即可，匯入器不用改。
+  重生 HD 素材：Real-ESRGAN ncnn-vulkan 官方 macOS 版（universal），
+  `realesrgan-ncnn-vulkan -i img -o out -n realesrgan-x4plus-anime -m models`（記得 `-m`，
+  不給會靜默失敗）。
 - 繁殖上限（2026-07-17 加）：原始引擎**沒有**數量上限（README 曾誤寫 50），繁殖請求來就生。
   改在 `ShijimaManager::tick` 消化 `breed_request` 前檢查 `m_mascots.size()`，
   額滿（QSettings `mascot/maxCount`，預設 20，0=不限）就把請求丟棄。**手動生成不受限**。

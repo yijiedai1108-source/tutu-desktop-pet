@@ -15,10 +15,18 @@ index 5ca3ada..73aefc2 100644
  	path = cpp-httplib
  	url = https://github.com/yhirose/cpp-httplib
 diff --git a/Asset.cc b/Asset.cc
-index 40982f7..21f74aa 100644
+index 40982f7..1ace543 100644
 --- a/Asset.cc
 +++ b/Asset.cc
-@@ -63,7 +63,7 @@ void Asset::setImage(QImage const& image) {
+@@ -17,6 +17,7 @@
+ // 
+ 
+ #include "Asset.hpp"
++#include <cmath>
+ 
+ QRect Asset::getRectForImage(QImage const& image) {
+     int startX=0, endX=image.width(), startY=0, endY=image.height();
+@@ -63,8 +64,30 @@ void Asset::setImage(QImage const& image) {
      m_offset = rect;
      m_image = image.copy(rect);
      m_mirrored = m_image.mirrored(true, false);
@@ -27,30 +35,96 @@ index 40982f7..21f74aa 100644
      m_mask = QBitmap::fromImage(m_image.createAlphaMask());
      m_mirroredMask = QBitmap::fromImage(m_mirrored.createAlphaMask());
  #endif
+ }
++
++void Asset::setHdImage(QImage const& hd) {
++    // 高清圖必須沿用「基準圖的裁切框」等比放大後的區域來裁，
++    // 不能重算自己的不透明邊界——AI 放大的邊緣會暈開幾個像素，
++    // 重算出來的框會偏移，畫進同一個目標框時整隻兔會微妙變形。
++    if (m_originalSize.isEmpty() || hd.isNull()) {
++        return;
++    }
++    double sx = (double)hd.width() / m_originalSize.width();
++    double sy = (double)hd.height() / m_originalSize.height();
++    QRect rect {
++        (int)std::lround(m_offset.x() * sx),
++        (int)std::lround(m_offset.y() * sy),
++        (int)std::lround(m_offset.width() * sx),
++        (int)std::lround(m_offset.height() * sy) };
++    rect = rect.intersected(hd.rect());
++    if (rect.isEmpty()) {
++        return;
++    }
++    m_hdImage = hd.copy(rect);
++    m_hdMirrored = m_hdImage.mirrored(true, false);
++}
 diff --git a/Asset.hpp b/Asset.hpp
-index d5a8d29..6ceee5a 100644
+index d5a8d29..4ad5d06 100644
 --- a/Asset.hpp
 +++ b/Asset.hpp
-@@ -30,7 +30,7 @@ private:
+@@ -30,18 +30,26 @@ private:
      QSize m_originalSize;
      QImage m_image;
      QImage m_mirrored;
 -#ifdef __linux__
++    QImage m_hdImage;
++    QImage m_hdMirrored;
 +#if defined(__linux__) || defined(__APPLE__)
      QBitmap m_mask;
      QBitmap m_mirroredMask;
  #endif
-@@ -40,8 +40,8 @@ public:
-     QImage const& image(bool mirrored) const { 
+ public:
+     QRect const& offset() const { return m_offset; }
+     QSize const& originalSize() const { return m_originalSize; }
+-    QImage const& image(bool mirrored) const { 
++    QImage const& image(bool mirrored) const {
          return mirrored ? m_mirrored : m_image;
      }
 -#ifdef __linux__
 -    QBitmap const& mask(bool mirrored) const { 
++    // 高清變體（img/hd-*.png，番茄鐘巨兔放大顯示時用；沒有就回空圖）
++    bool hasHd() const { return !m_hdImage.isNull(); }
++    QImage const& hdImage(bool mirrored) const {
++        return mirrored ? m_hdMirrored : m_hdImage;
++    }
++    void setHdImage(QImage const& hd);
 +#if defined(__linux__) || defined(__APPLE__)
 +    QBitmap const& mask(bool mirrored) const {
          return mirrored ? m_mirroredMask : m_mask;
      }
  #endif
+diff --git a/AssetLoader.cc b/AssetLoader.cc
+index 4db1736..82b37ef 100644
+--- a/AssetLoader.cc
++++ b/AssetLoader.cc
+@@ -21,6 +21,8 @@
+ #include "qdir.h"
+ #include "DefaultMascot.hpp"
+ #include <QDir>
++#include <QFile>
++#include <QFileInfo>
+ 
+ AssetLoader::AssetLoader() {}
+ 
+@@ -58,6 +60,18 @@ Asset const& AssetLoader::loadAsset(QString path) {
+             image.load(path);
+         }
+         asset.setImage(image);
++        // 高清變體：img/ 內同名加 hd- 前綴（如 hd-shime1.png，隨素材包散佈）。
++        // 番茄鐘巨兔放大顯示時改用高清圖，128px 素材放 3 倍就不糊了。
++        if (!path.startsWith("@") && !image.isNull()) {
++            QFileInfo fi { path };
++            QString hdPath = fi.dir().filePath("hd-" + fi.fileName());
++            if (QFile::exists(hdPath)) {
++                QImage hd;
++                if (hd.load(hdPath)) {
++                    asset.setHdImage(hd);
++                }
++            }
++        }
+     }
+     return m_assets[path];
+ }
 diff --git a/Platform/macOS/Platform.mm b/Platform/macOS/Platform.mm
 index ad712f5..54194f2 100644
 --- a/Platform/macOS/Platform.mm
@@ -153,7 +227,7 @@ index 2115764..029fbdc 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..13184d9 100644
+index 69f6778..d3f5242 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -1037,7 +1111,7 @@ index 69f6778..13184d9 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,9 +1677,28 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,9 +1677,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -1051,14 +1125,15 @@ index 69f6778..13184d9 100644
      m_previousWindow = m_currentWindow;
  
 -    env->set_scale(1.0 / std::sqrt(m_userScale));
-+    // 番茄鐘休息中：全部兔兔放大到約半個螢幕高。視覺尺寸 = 圖檔高(128) ÷ env scale，
++    // 番茄鐘休息中：全部兔兔放大到約 1/3 螢幕高。視覺尺寸 = 圖檔高(128) ÷ env scale，
 +    // 直接用目標像素反推，繞過 userScale 的平方根換算。
++    // （原定半螢幕高，2026-07-17 翻案：128px 素材放 4 倍太糊，1/3 高＝2.9 倍剛好）
 +    //   defaults write com.pixelomer.Shijima-Qt "pomodoro.giantScale" -float 5   # 改倍率（128px 的幾倍）
 +    if (pomodoroBreakActive()) {
 +        double g = m_settings.value("pomodoro/giantScale", 0.0).toDouble();
 +        QScreen *scr = screen ? screen : QGuiApplication::primaryScreen();
 +        double targetPx = (g >= 1.0) ? 128.0 * g
-+            : scr->geometry().height() * 0.5;
++            : scr->geometry().height() / 3.0;
 +        env->set_scale(128.0 / targetPx);
 +    }
 +    else {
@@ -1067,7 +1142,7 @@ index 69f6778..13184d9 100644
  }
  
  void ShijimaManager::updateEnvironment() {
-@@ -1000,9 +1836,17 @@ void ShijimaManager::tick() {
+@@ -1000,9 +1837,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -1086,7 +1161,7 @@ index 69f6778..13184d9 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1011,6 +1855,14 @@ void ShijimaManager::tick() {
+@@ -1011,6 +1856,14 @@ void ShijimaManager::tick() {
                  mascot.state->env = m_env[newScreen];
              }
          }
@@ -1101,7 +1176,7 @@ index 69f6778..13184d9 100644
          if (breedRequest.available) {
              if (breedRequest.name == "") {
                  breedRequest.name = shimeji->mascotName().toStdString();
-@@ -1076,6 +1928,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1929,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -1213,7 +1288,7 @@ index 3fc6de4..17ee769 100644
      bool m_firstShow = true;
      bool m_wasVisible = false;
 diff --git a/ShijimaWidget.cc b/ShijimaWidget.cc
-index 295a4e4..bf991c2 100644
+index 295a4e4..f901629 100644
 --- a/ShijimaWidget.cc
 +++ b/ShijimaWidget.cc
 @@ -19,6 +19,7 @@
@@ -1224,11 +1299,26 @@ index 295a4e4..bf991c2 100644
  #include <QFile>
  #include <QDir>
  #include <QScreen>
-@@ -115,19 +116,31 @@ void ShijimaWidget::paintEvent(QPaintEvent *event) {
+@@ -114,20 +115,45 @@ void ShijimaWidget::paintEvent(QPaintEvent *event) {
+     auto &image = asset.image(isMirroredRender());
      auto scaledSize = image.size() / m_drawScale;
      QPainter painter(this);
-     painter.drawImage(QRect { m_drawOrigin, scaledSize }, image);
+-    painter.drawImage(QRect { m_drawOrigin, scaledSize }, image);
 -#ifdef __linux__
++    // 縮放時開平滑插值——番茄鐘巨兔放大 3 倍，最近鄰會整隻馬賽克。
++    // 原尺寸（drawScale==1）不重採樣，維持原本的銳利。
++    if (m_drawScale != 1.0) {
++        painter.setRenderHint(QPainter::SmoothPixmapTransform);
++    }
++    // 放大顯示且素材有高清變體（img/hd-*.png）→ 改畫高清圖到同一個目標框。
++    // 512px 下採樣到 369px 是銳利的；128px 上採樣才會糊。
++    if (m_drawScale < 1.0 && asset.hasHd()) {
++        painter.drawImage(QRect { m_drawOrigin, scaledSize },
++            asset.hdImage(isMirroredRender()));
++    }
++    else {
++        painter.drawImage(QRect { m_drawOrigin, scaledSize }, image);
++    }
 +#if defined(__linux__) || defined(__APPLE__)
      if (Platform::useWindowMasks()) {
 -        m_windowMask = QBitmap::fromPixmap(asset.mask(isMirroredRender())
@@ -1268,7 +1358,7 @@ index 295a4e4..bf991c2 100644
          }
      }
  #endif
-@@ -179,12 +192,18 @@ bool ShijimaWidget::updateOffsets() {
+@@ -179,12 +205,18 @@ bool ShijimaWidget::updateOffsets() {
          - (int)env()->screen.left;
      int winY = (int)m_mascot->state->anchor.y - m_anchorInWindow.y()
          - (int)env()->screen.top;

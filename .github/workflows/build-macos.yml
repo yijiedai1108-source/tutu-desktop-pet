@@ -85,7 +85,7 @@ jobs:
         run: |
           mkdir -p bundle/tutu-desktop-pet
           cp -R shijima/publish/macOS/release/Shijima-Qt.app bundle/tutu-desktop-pet/
-          (cd packs && zip -qr ../bundle/tutu-desktop-pet/usagi-shimeji-v3.zip usagi-shimeji)
+          (cd packs && zip -qr ../bundle/tutu-desktop-pet/usagi-shimeji-v4.zip usagi-shimeji)
           cp docs/使用手冊-mac.md bundle/tutu-desktop-pet/使用手冊.md
           # upload-artifact 不保留 symlink / 執行權限，先用 ditto 自壓一層
           (cd bundle && ditto -c -k --keepParent tutu-desktop-pet tutu-desktop-pet.zip)
