@@ -60,6 +60,16 @@
     下班狂奔開場（自動+手動，統一走 `startCelebration()`）→`celebrate.wav`。
   - 右鍵選單「🔊 兔兔叫聲」開關 = QSettings `sound/enabled`（預設開）。
   - 測試鉤子：`SHIJIMA_TEST_SHOUT=1` 讓吶喊約 15 秒一次（平常十幾分鐘），驗證泡泡字↔叫聲對應用。
+- 番茄鐘巨兔（2026-07-17 加）：工作 25 分鐘 → 全部兔兔放大到約半個螢幕高 5 分鐘提醒休息 →
+  自動縮回重計。變大是在 `updateEnvironment` 每 tick 從 `pomodoroBreakActive()` **推導** env scale
+  （目標像素 = 螢幕高 × 0.5，反推 `set_scale(128/目標)`，繞過 userScale 的平方根換算）——
+  不是改狀態再還原，所以結束路徑（自動/跳過/關開關）只需清 `m_breakUntilMs`，不可能卡永久巨兔。
+  開啟時 50 分久坐通知靜音、關閉自動恢復。右鍵「🍅 番茄鐘休息（25/5）」開關（`pomodoro/enabled`
+  預設開）＋休息中「⏭ 跳過休息」。倍率可調：
+  ```bash
+  defaults write com.pixelomer.Shijima-Qt "pomodoro.giantScale" -float 5   # 128px 的幾倍（未設＝半螢幕高）
+  ```
+  測試鉤子 `SHIJIMA_TEST_POMODORO=1`（40 秒工作/15 秒休息）。
 - 繁殖上限（2026-07-17 加）：原始引擎**沒有**數量上限（README 曾誤寫 50），繁殖請求來就生。
   改在 `ShijimaManager::tick` 消化 `breed_request` 前檢查 `m_mascots.size()`，
   額滿（QSettings `mascot/maxCount`，預設 20，0=不限）就把請求丟棄。**手動生成不受限**。

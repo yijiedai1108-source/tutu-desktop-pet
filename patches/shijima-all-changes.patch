@@ -66,7 +66,7 @@ index ad712f5..54194f2 100644
  
  }
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..4056090 100644
+index 2115764..029fbdc 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
 @@ -19,12 +19,47 @@
@@ -117,7 +117,7 @@ index 2115764..4056090 100644
      // Behaviors menu   
      {
          std::vector<std::string> behaviors;
-@@ -44,6 +79,20 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+@@ -44,6 +79,34 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
          }
      }
  
@@ -135,11 +135,25 @@ index 2115764..4056090 100644
 +        ShijimaManager::defaultManager()->setSoundEnabled(checked);
 +    });
 +
++    // 番茄鐘巨兔開關（25 分工作 → 變大 5 分鐘提醒休息）；休息中多一項「跳過」
++    action = addAction(QString::fromUtf8("🍅 番茄鐘休息（25/5）"));
++    action->setCheckable(true);
++    action->setChecked(ShijimaManager::defaultManager()->pomodoroEnabled());
++    connect(action, &QAction::triggered, [](bool checked){
++        ShijimaManager::defaultManager()->setPomodoroEnabled(checked);
++    });
++    if (ShijimaManager::defaultManager()->pomodoroBreakActive()) {
++        action = addAction(QString::fromUtf8("⏭ 跳過休息"));
++        connect(action, &QAction::triggered, [](){
++            ShijimaManager::defaultManager()->skipBreak();
++        });
++    }
++
      // Show manager
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..6466f9c 100644
+index 69f6778..13184d9 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -524,7 +538,7 @@ index 69f6778..6466f9c 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1149,389 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1149,443 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -721,6 +735,40 @@ index 69f6778..6466f9c 100644
 +    }
 +}
 +
++// 番茄鐘巨兔：工作 25 分鐘 → 全部兔兔變大到約半個螢幕高，休息 5 分鐘後自動縮回重計。
++// 開啟時取代 50 分鐘久坐通知。實際的變大在 updateEnvironment 的縮放推導（每 tick 重算，
++// 不是改狀態），所以任何結束路徑都只需要清 m_breakUntilMs，不存在「漏還原卡永久巨兔」。
++// 測試鉤子：SHIJIMA_TEST_POMODORO=1 → 40 秒工作 / 15 秒休息。
++bool ShijimaManager::pomodoroEnabled() {
++    return m_settings.value("pomodoro/enabled", true).toBool();
++}
++
++void ShijimaManager::setPomodoroEnabled(bool enabled) {
++    m_settings.setValue("pomodoro/enabled", enabled);
++    endBreak();   // 關：立即縮回；開：從零開始計，不會一開就變大
++}
++
++bool ShijimaManager::pomodoroBreakActive() const {
++    return m_breakUntilMs > 0;
++}
++
++void ShijimaManager::skipBreak() {
++    endBreak();
++}
++
++void ShijimaManager::startBreak() {
++    qint64 len = qEnvironmentVariableIsSet("SHIJIMA_TEST_POMODORO")
++        ? 15 * 1000 : 5 * 60 * 1000;
++    m_breakUntilMs = QDateTime::currentMSecsSinceEpoch() + len;
++    notify(QString::fromUtf8("休息 5 分鐘 🍅（右鍵兔兔可跳過）"));
++    playVoice("yaha.wav");
++}
++
++void ShijimaManager::endBreak() {
++    m_breakUntilMs = 0;
++    m_workSeconds = 0;
++}
++
 +void ShijimaManager::hungerTick() {
 +    m_hungerSeconds += 5.0 * m_hungerScale;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
@@ -738,15 +786,35 @@ index 69f6778..6466f9c 100644
 +        m_settings.setValue("water/thirstSeconds", m_thirstSeconds);
 +    }
 +
-+    // 久坐提醒：每 50 分鐘伸展一下（計時不跨重啟——重開機＝有起來走動）
++    // 久坐提醒：每 50 分鐘伸展一下（計時不跨重啟——重開機＝有起來走動）。
++    // 番茄鐘巨兔開啟時靜音（25 分鐘就會被巨兔提醒，不重複轟炸），關閉時自動恢復。
 +    m_sitSeconds += 5.0 * m_hungerScale;
 +    if (m_sitSeconds >= 50 * 60) {
 +        m_sitSeconds = 0;
-+        for (auto mascot : m_mascots) {
-+            try { mascot->mascot().next_behavior("Stretch"); }
-+            catch (...) {}
++        if (!pomodoroEnabled()) {
++            for (auto mascot : m_mascots) {
++                try { mascot->mascot().next_behavior("Stretch"); }
++                catch (...) {}
++            }
++            notify(QString::fromUtf8("坐好久了，站起來動一動吧 🧘"));
 +        }
-+        notify(QString::fromUtf8("坐好久了，站起來動一動吧 🧘"));
++    }
++
++    // 番茄鐘：工作滿 25 分鐘進入休息（變大本身在 updateEnvironment 的縮放推導）
++    if (pomodoroEnabled()) {
++        if (pomodoroBreakActive()) {
++            if (QDateTime::currentMSecsSinceEpoch() >= m_breakUntilMs) {
++                endBreak();
++            }
++        }
++        else {
++            m_workSeconds += 5.0;
++            double workTarget = qEnvironmentVariableIsSet("SHIJIMA_TEST_POMODORO")
++                ? 40 : 25 * 60;
++            if (m_workSeconds >= workTarget) {
++                startBreak();
++            }
++        }
 +    }
 +
 +    // 下班提醒：跨過下班時間那一刻提醒一次（預設 18:00，QSettings workday/end 可改）
@@ -914,7 +982,7 @@ index 69f6778..6466f9c 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1557,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1611,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -969,7 +1037,7 @@ index 69f6778..6466f9c 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,6 +1623,13 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,9 +1677,28 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -982,8 +1050,24 @@ index 69f6778..6466f9c 100644
 +    env->speed_mult = moveSp;
      m_previousWindow = m_currentWindow;
  
-     env->set_scale(1.0 / std::sqrt(m_userScale));
-@@ -1000,9 +1770,17 @@ void ShijimaManager::tick() {
+-    env->set_scale(1.0 / std::sqrt(m_userScale));
++    // 番茄鐘休息中：全部兔兔放大到約半個螢幕高。視覺尺寸 = 圖檔高(128) ÷ env scale，
++    // 直接用目標像素反推，繞過 userScale 的平方根換算。
++    //   defaults write com.pixelomer.Shijima-Qt "pomodoro.giantScale" -float 5   # 改倍率（128px 的幾倍）
++    if (pomodoroBreakActive()) {
++        double g = m_settings.value("pomodoro/giantScale", 0.0).toDouble();
++        QScreen *scr = screen ? screen : QGuiApplication::primaryScreen();
++        double targetPx = (g >= 1.0) ? 128.0 * g
++            : scr->geometry().height() * 0.5;
++        env->set_scale(128.0 / targetPx);
++    }
++    else {
++        env->set_scale(1.0 / std::sqrt(m_userScale));
++    }
+ }
+ 
+ void ShijimaManager::updateEnvironment() {
+@@ -1000,9 +1836,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -1002,7 +1086,7 @@ index 69f6778..6466f9c 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1011,6 +1789,14 @@ void ShijimaManager::tick() {
+@@ -1011,6 +1855,14 @@ void ShijimaManager::tick() {
                  mascot.state->env = m_env[newScreen];
              }
          }
@@ -1017,7 +1101,7 @@ index 69f6778..6466f9c 100644
          if (breedRequest.available) {
              if (breedRequest.name == "") {
                  breedRequest.name = shimeji->mascotName().toStdString();
-@@ -1076,6 +1862,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1928,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -1035,7 +1119,7 @@ index 69f6778..6466f9c 100644
      QScreen *screen = mascotScreen();
      updateEnvironment(screen);
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..d6dfa05 100644
+index 3fc6de4..17ee769 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -20,6 +20,7 @@
@@ -1054,17 +1138,21 @@ index 3fc6de4..d6dfa05 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -50,6 +52,9 @@ public:
+@@ -50,6 +52,13 @@ public:
      void updateEnvironment(QScreen *);
      QString const& mascotsPath();
      ShijimaWidget *spawn(std::string const& name);
 +    void startCelebration();
 +    bool soundEnabled();
 +    void setSoundEnabled(bool enabled);
++    bool pomodoroEnabled();
++    void setPomodoroEnabled(bool enabled);
++    bool pomodoroBreakActive() const;
++    void skipBreak();
      void killAll();
      void killAll(QString const& name);
      void killAllButOne(ShijimaWidget *widget);
-@@ -62,6 +67,19 @@ public:
+@@ -62,6 +71,19 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -1084,18 +1172,20 @@ index 3fc6de4..d6dfa05 100644
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +114,10 @@ private:
+@@ -96,6 +118,12 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
 +    void hungerTick();
 +    void triggerCry(bool all);
++    void startBreak();
++    void endBreak();
 +    void notify(QString const& message);
 +    void playVoice(QString const& name);
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +127,24 @@ private:
+@@ -105,6 +133,26 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -1113,6 +1203,8 @@ index 3fc6de4..d6dfa05 100644
 +    int m_affection = 0;
 +    double m_neglectSeconds = 0;
 +    qint64 m_celebrateUntilMs = 0;
++    double m_workSeconds = 0;
++    qint64 m_breakUntilMs = 0;
 +    int m_craving = 0;
 +    bool m_wasHungry = false;
 +    QTime m_lastTickTime;
