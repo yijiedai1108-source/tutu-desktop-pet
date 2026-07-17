@@ -227,7 +227,7 @@ index 2115764..029fbdc 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..d3f5242 100644
+index 69f6778..670b2bc 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -612,7 +612,7 @@ index 69f6778..d3f5242 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1149,443 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1149,462 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -834,13 +834,32 @@ index 69f6778..d3f5242 100644
 +    qint64 len = qEnvironmentVariableIsSet("SHIJIMA_TEST_POMODORO")
 +        ? 15 * 1000 : 5 * 60 * 1000;
 +    m_breakUntilMs = QDateTime::currentMSecsSinceEpoch() + len;
++    // 開場語每次休息隨機抽一句（烏薩奇風），倒數期間固定不換
++    static const char *const breakPhrases[] = {
++        "休息囉～🐰",
++        "ヤハ！休息時間！",
++        "ウラ！起來動一動！",
++        "眼睛也休息一下～",
++        "🍮 布丁補給時間！",
++        "嗚啦～呀哈呀哈！休息！",
++    };
++    m_breakPhrase = QString::fromUtf8(breakPhrases[
++        QRandomGenerator::global()->bounded(
++            (int)(sizeof(breakPhrases) / sizeof(breakPhrases[0])))]);
++    m_breakSecShown = -1;
 +    notify(QString::fromUtf8("休息 5 分鐘 🍅（右鍵兔兔可跳過）"));
 +    playVoice("yaha.wav");
 +}
 +
 +void ShijimaManager::endBreak() {
++    bool wasBreak = m_breakUntilMs > 0;
 +    m_breakUntilMs = 0;
 +    m_workSeconds = 0;
++    m_breakSecShown = -1;
++    // 倒數泡泡立即收掉（只在真的處於休息時，避免誤收下班泡泡等其他訊息）
++    if (wasBreak && m_speechBubble != nullptr) {
++        m_speechBubble->hide();
++    }
 +}
 +
 +void ShijimaManager::hungerTick() {
@@ -1056,7 +1075,7 @@ index 69f6778..d3f5242 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1611,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1630,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -1111,7 +1130,7 @@ index 69f6778..d3f5242 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,9 +1677,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,9 +1696,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -1142,7 +1161,29 @@ index 69f6778..d3f5242 100644
  }
  
  void ShijimaManager::updateEnvironment() {
-@@ -1000,9 +1837,17 @@ void ShijimaManager::tick() {
+@@ -947,6 +1803,21 @@ QWidget *ShijimaManager::mascotParent() {
+ }
+ 
+ void ShijimaManager::tick() {
++    // 番茄鐘休息倒數泡泡：每秒用 say() 換字（泡泡本身會跟著第一隻兔）。
++    // 每次 say 的存活 1.5 秒 > 更新間隔 1 秒 → 整段休息持續顯示，結束後自然消失。
++    if (pomodoroBreakActive()) {
++        int remainSec = (int)((m_breakUntilMs
++            - QDateTime::currentMSecsSinceEpoch() + 999) / 1000);
++        if (remainSec < 0) { remainSec = 0; }
++        if (remainSec != m_breakSecShown && m_speechBubble != nullptr) {
++            m_breakSecShown = remainSec;
++            static_cast<SpeechBubble *>(m_speechBubble)->say(
++                QString::fromUtf8("%1 %2:%3")
++                    .arg(m_breakPhrase)
++                    .arg(remainSec / 60)
++                    .arg(remainSec % 60, 2, 10, QChar('0')), 1500);
++        }
++    }
+     if (m_hasTickCallbacks) {
+         auto lock = acquireLock();
+         for (auto &callback : m_tickCallbacks) {
+@@ -1000,9 +1871,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -1161,7 +1202,7 @@ index 69f6778..d3f5242 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1011,6 +1856,14 @@ void ShijimaManager::tick() {
+@@ -1011,6 +1890,14 @@ void ShijimaManager::tick() {
                  mascot.state->env = m_env[newScreen];
              }
          }
@@ -1176,7 +1217,7 @@ index 69f6778..d3f5242 100644
          if (breedRequest.available) {
              if (breedRequest.name == "") {
                  breedRequest.name = shimeji->mascotName().toStdString();
-@@ -1076,6 +1929,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1963,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -1194,7 +1235,7 @@ index 69f6778..d3f5242 100644
      QScreen *screen = mascotScreen();
      updateEnvironment(screen);
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..17ee769 100644
+index 3fc6de4..37e8f5d 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -20,6 +20,7 @@
@@ -1260,7 +1301,7 @@ index 3fc6de4..17ee769 100644
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +133,26 @@ private:
+@@ -105,6 +133,28 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -1280,6 +1321,8 @@ index 3fc6de4..17ee769 100644
 +    qint64 m_celebrateUntilMs = 0;
 +    double m_workSeconds = 0;
 +    qint64 m_breakUntilMs = 0;
++    int m_breakSecShown = -1;
++    QString m_breakPhrase;
 +    int m_craving = 0;
 +    bool m_wasHungry = false;
 +    QTime m_lastTickTime;

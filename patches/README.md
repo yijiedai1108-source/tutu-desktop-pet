@@ -80,6 +80,10 @@
   defaults write com.pixelomer.Shijima-Qt "pomodoro.giantScale" -float 5   # 128px 的幾倍（未設＝半螢幕高）
   ```
   測試鉤子 `SHIJIMA_TEST_POMODORO=1`（40 秒工作/15 秒休息）。
+  倒數泡泡（2026-07-17 加）：休息中重用吶喊 SpeechBubble，manager `tick()` 每秒
+  `say("<開場語> m:ss", 1500ms)`——存活 1.5s > 更新間隔 1s，整段持續顯示、結束自然消失；
+  `endBreak()` 另主動 hide。開場語 6 句（烏薩奇風）每次休息在 `startBreak()` 隨機抽一句，
+  倒數期間固定。
 - 高清變體（2026-07-17 加，配合巨兔）：`img/hd-<原名>.png`（512px，Real-ESRGAN
   `realesrgan-x4plus-anime` 模型放大）。`AssetLoader` 載入素材時自動找同名 `hd-` 檔，
   `ShijimaWidget::paintEvent` 在**放大顯示**（drawScale<1）且有高清變體時改畫高清圖——
