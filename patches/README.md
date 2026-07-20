@@ -24,6 +24,14 @@
   defaults write com.pixelomer.Shijima-Qt "wall.leftMargin"  -int 0     # 左牆內縮 px（預設 0）
   defaults write com.pixelomer.Shijima-Qt "wall.rightMargin" -int 0     # 右牆內縮 px（預設 0）
   ```
+- 睡眠喚醒後兔兔消失修復（2026-07-20，朋友「待機很久兔兔消失」）：`ShijimaManager::tick` 的收屍
+  迴圈原本用 `if (!shimeji->isVisible()) delete`——但 macOS 深睡喚醒時 OS 會把兔兔視窗暫時隱藏
+  （螢幕電源循環/重配置），`isVisible()` 一度回 false → 好好的兔兔被永久刪除、喚醒後不會自己回來。
+  改判**明確旗標** `shimeji->markedForDeletion()`（真正的關閉都走 `markForDeletion()`）；順手把單隻
+  Dismiss 的 `closeAction()` 從 `close()` 改成 `markForDeletion()`，讓所有刪除路徑一致走旗標。
+  另修 `screenRemoved` 的 null env 崩潰：原本 `m_env[primary]` 在 primary 尚未建 env 時會插入
+  null shared_ptr → `reset_position()` segfault；改成先找有效 target env、並修正 `m_reverseEnv.remove`
+  的對象（原本錯移成 primary 的）。
 - macOS per-pixel 點擊穿透：原始碼把視窗遮罩（`Asset::mask` / `ShijimaWidget` 的 `setMask`）
   與 `Platform::useWindowMasks()` 從 `#ifdef __linux__` 放行到 `__APPLE__`，並讓 `useWindowMasks()`
   在 macOS 回傳 true。效果：兔兔只有實際身體像素會擋滑鼠，身體周圍透明區可穿透——
@@ -32,6 +40,11 @@
 - 遮罩效能快取（`ShijimaWidget::paintEvent`）：上面的遮罩原本每幀都重算並 `setMask`（macOS 每幀重塑
   視窗有成本）。改成用 `m_maskAsset/m_maskMirror/m_maskOrigin/m_maskScale` 快取，**只在圖片幀/鏡像/
   位置/縮放變動時才重算**，兔兔單純移動的每幀跳過。
+- 巨兔遮罩破圖修復（2026-07-20，`ShijimaWidget::paintEvent`）：番茄鐘放大時 `setMask` 原本用
+  128px 的 1-bit 遮罩 `.scaled(scaledSize)` 硬撐大 4 倍（最近鄰）→ 鋸齒方塊輪廓，把裡面平滑的
+  HD 身體啃成破爛邊（朋友回報「放大破圖」）。改成：`drawScale<1 且 asset.hasHd()` 時，遮罩改用
+  **HD 圖縮到目標尺寸後的 `createAlphaMask()`**（高解析、平滑輪廓）。原尺寸/無 HD 走原路。
+  離線用 Asset class 重現驗證過（`scratchpad/gianttest/mask-test.cc`）。
 - 下班狂奔更亂（`ShijimaManager` tick）：原本每 tick 硬設 `next_behavior("RunAlongWorkAreaFloor")`，
   但引擎實際的行為名是**英文**的（經 translator/parser 產生，見右鍵 Behaviors 選單那份），
   而且跑/爬類多半 `hidden`。改成 20 秒慶祝期間每隔約 1.2~2.4 秒，

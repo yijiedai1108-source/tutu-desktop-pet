@@ -314,7 +314,7 @@ index 2115764..8d203bb 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..670b2bc 100644
+index 69f6778..06e3ab8 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
 @@ -17,7 +17,345 @@
@@ -672,7 +672,48 @@ index 69f6778..670b2bc 100644
  #include <QRandomGenerator>
  #include "PlatformWidget.hpp"
  #include "ShijimaLicensesDialog.hpp"
-@@ -752,6 +1092,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -617,15 +957,35 @@ void ShijimaManager::screenAdded(QScreen *screen) {
+ }
+ 
+ void ShijimaManager::screenRemoved(QScreen *screen) {
+-    if (m_env.contains(screen) && screen != nullptr) {
+-        auto primary = QGuiApplication::primaryScreen();
++    if (screen == nullptr || !m_env.contains(screen)) {
++        return;
++    }
++    auto removedEnv = m_env[screen];
++    // 找一個有效的落腳 env 給原本掛在被移除螢幕上的兔兔。
++    // ⚠️ 原本直接用 m_env[primary]：喚醒時螢幕重配置的訊號順序不保證，若 removed 先於
++    // added 到達、primary 尚未建 env，QMap::operator[] 會**插入一個 null shared_ptr**，
++    // 接著 reset_position() 對 null env → segfault、整個 app 掛掉(兔兔全消失)。
++    std::shared_ptr<shijima::mascot::environment> target;
++    auto primary = QGuiApplication::primaryScreen();
++    if (primary != nullptr && m_env.contains(primary) && primary != screen) {
++        target = m_env[primary];
++    }
++    else {
++        for (auto it = m_env.begin(); it != m_env.end(); ++it) {
++            if (it.key() != nullptr && it.key() != screen && it.value()) {
++                target = it.value();
++                break;
++            }
++        }
++    }
++    if (target) {
+         for (auto &mascot : m_mascots) {
+-            mascot->setEnv(m_env[primary]);
++            mascot->setEnv(target);
+             mascot->mascot().reset_position();
+         }
+-        m_reverseEnv.remove(m_env[primary].get());
+-        m_env.remove(screen);
+     }
++    m_reverseEnv.remove(removedEnv.get());   // 移除「被移除螢幕」的反查（原本錯移成 primary 的）
++    m_env.remove(screen);
+ }
+ 
+ ShijimaManager::~ShijimaManager() {
+@@ -752,6 +1112,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -699,7 +740,7 @@ index 69f6778..670b2bc 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1149,462 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1169,462 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -1162,7 +1203,7 @@ index 69f6778..670b2bc 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1630,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1650,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -1217,7 +1258,7 @@ index 69f6778..670b2bc 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,9 +1696,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,9 +1716,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -1248,7 +1289,7 @@ index 69f6778..670b2bc 100644
  }
  
  void ShijimaManager::updateEnvironment() {
-@@ -947,6 +1803,21 @@ QWidget *ShijimaManager::mascotParent() {
+@@ -947,6 +1823,21 @@ QWidget *ShijimaManager::mascotParent() {
  }
  
  void ShijimaManager::tick() {
@@ -1270,7 +1311,20 @@ index 69f6778..670b2bc 100644
      if (m_hasTickCallbacks) {
          auto lock = acquireLock();
          for (auto &callback : m_tickCallbacks) {
-@@ -1000,9 +1871,17 @@ void ShijimaManager::tick() {
+@@ -991,7 +1882,11 @@ void ShijimaManager::tick() {
+     for (auto iter = m_mascots.end(); iter != m_mascots.begin(); ) {
+         --iter;
+         ShijimaWidget *shimeji = *iter;
+-        if (!shimeji->isVisible()) {
++        // 只刪「明確標記要刪」的兔兔（Dismiss / killAll / state->dead 都走 markForDeletion）。
++        // ⚠️ 原本用 !isVisible() 當刪除依據——macOS 睡眠很久喚醒時，OS 會把兔兔視窗暫時
++        // 隱藏(螢幕電源循環/重配置)，isVisible() 一度回 false → 好好的兔兔被永久刪除、
++        // 喚醒後不會自己回來(朋友「待機很久兔兔消失」的根因)。改判明確旗標即免疫。
++        if (shimeji->markedForDeletion()) {
+             int mascotId = shimeji->mascotId();
+             delete shimeji;
+             auto erasePos = iter;
+@@ -1000,9 +1895,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -1289,7 +1343,7 @@ index 69f6778..670b2bc 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1011,6 +1890,14 @@ void ShijimaManager::tick() {
+@@ -1011,6 +1914,14 @@ void ShijimaManager::tick() {
                  mascot.state->env = m_env[newScreen];
              }
          }
@@ -1304,7 +1358,7 @@ index 69f6778..670b2bc 100644
          if (breedRequest.available) {
              if (breedRequest.name == "") {
                  breedRequest.name = shimeji->mascotName().toStdString();
-@@ -1076,6 +1963,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +1987,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -1418,7 +1472,7 @@ index 3fc6de4..37e8f5d 100644
      bool m_firstShow = true;
      bool m_wasVisible = false;
 diff --git a/ShijimaWidget.cc b/ShijimaWidget.cc
-index 295a4e4..0688f4a 100644
+index 295a4e4..584d289 100644
 --- a/ShijimaWidget.cc
 +++ b/ShijimaWidget.cc
 @@ -19,6 +19,7 @@
@@ -1429,7 +1483,7 @@ index 295a4e4..0688f4a 100644
  #include <QFile>
  #include <QDir>
  #include <QScreen>
-@@ -114,20 +115,45 @@ void ShijimaWidget::paintEvent(QPaintEvent *event) {
+@@ -114,20 +115,55 @@ void ShijimaWidget::paintEvent(QPaintEvent *event) {
      auto &image = asset.image(isMirroredRender());
      auto scaledSize = image.size() / m_drawScale;
      QPainter painter(this);
@@ -1473,8 +1527,18 @@ index 295a4e4..0688f4a 100644
 +            m_maskMirror = mirror;
 +            m_maskOrigin = m_drawOrigin;
 +            m_maskScale = m_drawScale;
-+            m_windowMask = QBitmap::fromPixmap(asset.mask(mirror)
-+                .scaled(scaledSize));
++            // 放大顯示且有高清變體時，遮罩改從「HD 縮到目標尺寸後的 alpha」建——
++            // 否則用 128px 的 1-bit 遮罩硬放大 4 倍（最近鄰）會變鋸齒方塊，把裡面
++            // 平滑的 HD 身體切成破爛邊（番茄鐘巨兔「放大破圖」）。原尺寸/無 HD 走原路。
++            if (m_drawScale < 1.0 && asset.hasHd()) {
++                QImage hdScaled = asset.hdImage(mirror).scaled(scaledSize,
++                    Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
++                m_windowMask = QBitmap::fromImage(hdScaled.createAlphaMask());
++            }
++            else {
++                m_windowMask = QBitmap::fromPixmap(asset.mask(mirror)
++                    .scaled(scaledSize));
++            }
 +            m_windowMask.translate(m_drawOrigin);
 +            auto bounding = m_windowMask.boundingRect();
 +            bounding.setTop(0);
@@ -1488,7 +1552,7 @@ index 295a4e4..0688f4a 100644
          }
      }
  #endif
-@@ -206,6 +232,21 @@ bool ShijimaWidget::updateOffsets() {
+@@ -206,6 +242,21 @@ bool ShijimaWidget::updateOffsets() {
      else {
          drawOffset += asset.offset().topLeft() / scale;
      }
@@ -1510,11 +1574,30 @@ index 295a4e4..0688f4a 100644
      if (drawOffset != m_drawOrigin) {
          needsRepaint = true;
          m_drawOrigin = drawOffset;
+@@ -357,7 +408,9 @@ void ShijimaWidget::mousePressEvent(QMouseEvent *event) {
+ }
+ 
+ void ShijimaWidget::closeAction() {
+-    close();
++    // 走 markForDeletion 旗標（與 killAll 一致），讓 manager 靠明確旗標刪除，
++    // 而不是靠 isVisible()——否則睡眠/喚醒時 OS 暫時隱藏視窗會被誤刪。
++    markForDeletion();
+ }
+ 
+ void ShijimaWidget::mouseReleaseEvent(QMouseEvent *event) {
 diff --git a/ShijimaWidget.hpp b/ShijimaWidget.hpp
-index f0a2985..c7a47c0 100644
+index f0a2985..a2e01b7 100644
 --- a/ShijimaWidget.hpp
 +++ b/ShijimaWidget.hpp
-@@ -78,8 +78,13 @@ private:
+@@ -49,6 +49,7 @@ public:
+     int mascotId() { return m_mascotId; }
+     void showInspector();
+     void markForDeletion() { m_markedForDeletion = true; }
++    bool markedForDeletion() const { return m_markedForDeletion; }
+     bool inspectorVisible();
+     bool paused() const { return m_paused || m_contextMenuVisible; }
+     shijima::mascot::manager &mascot() {
+@@ -78,8 +79,13 @@ private:
      void contextMenuClosed(QCloseEvent *);
      void showContextMenu(QPoint const&);
      bool updateOffsets();
