@@ -322,10 +322,10 @@ index 2115764..20c6a92 100644
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..3a3a829 100644
+index 69f6778..77506aa 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,7 +17,413 @@
+@@ -17,7 +17,414 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -683,7 +683,7 @@ index 69f6778..3a3a829 100644
 +        flags |= Qt::Tool;
 +        #endif
 +        setWindowFlags(flags);
-+        setFixedSize(72, 58);
++        setFixedSize(78, 56);
 +        startTimer(90);
 +    }
 +protected:
@@ -699,7 +699,7 @@ index 69f6778..3a3a829 100644
 +        }
 +        auto w = list.front();
 +        // 掛在兔兔頭部右上方（尾巴小圓指回兔兔）
-+        move(w->x() + w->width() - 20, w->y() - height() + 24);
++        move(w->x() + w->width() - 22, w->y() - height() + 24);
 +        m_phase = (m_phase + 1) % 30;
 +        update();
 +    }
@@ -710,13 +710,14 @@ index 69f6778..3a3a829 100644
 +        // 白底思考泡泡：主體圓角矩形 + 左下兩個小圓當尾巴（指向兔兔）
 +        p.setPen(QPen(line, 2.0));
 +        p.setBrush(Qt::white);
-+        p.drawEllipse(QRectF(10.0, (double)height() - 15.0, 9.0, 9.0));
-+        p.drawEllipse(QRectF(4.0, (double)height() - 8.0, 6.0, 6.0));
-+        QRectF body(5.0, 3.0, width() - 10.0, height() - 20.0);
++        p.drawEllipse(QRectF(12.0, (double)height() - 14.0, 9.0, 9.0));
++        p.drawEllipse(QRectF(5.0, (double)height() - 7.0, 6.0, 6.0));
++        QRectF body(4.0, 3.0, width() - 8.0, height() - 16.0);
 +        p.drawRoundedRect(body, 13.0, 13.0);
-+        // 三個 Z（由小到大），呼吸式波浪淡入淡出（三角波，避免用到 <cmath>）
++        // 三個 Z（由小到大），呼吸式波浪淡入淡出（三角波，避免用到 <cmath>）。
++        // 尺寸/位置壓在 body 內留邊，避免 Z 溢出白框。
 +        const struct { double x, y, size; int lag; } zs[] = {
-+            { 14.0, 30.0, 13.0, 0 }, { 28.0, 26.0, 17.0, 10 }, { 44.0, 21.0, 22.0, 20 } };
++            { 16.0, 32.0, 12.0, 0 }, { 29.0, 28.0, 15.0, 10 }, { 44.0, 23.0, 19.0, 20 } };
 +        for (auto &z : zs) {
 +            double ph = ((m_phase - z.lag + 30) % 30) / 30.0;   // 0~1 循環
 +            double tri = ph < 0.5 ? ph * 2.0 : (1.0 - ph) * 2.0; // 三角波 0~1~0
@@ -739,7 +740,7 @@ index 69f6778..3a3a829 100644
  #include <exception>
  #include <filesystem>
  #include <iostream>
-@@ -34,6 +440,8 @@
+@@ -34,6 +441,8 @@
  #include <QFile>
  #include <QDesktopServices>
  #include <QScreen>
@@ -748,7 +749,7 @@ index 69f6778..3a3a829 100644
  #include <QRandomGenerator>
  #include "PlatformWidget.hpp"
  #include "ShijimaLicensesDialog.hpp"
-@@ -617,15 +1025,35 @@ void ShijimaManager::screenAdded(QScreen *screen) {
+@@ -617,15 +1026,35 @@ void ShijimaManager::screenAdded(QScreen *screen) {
  }
  
  void ShijimaManager::screenRemoved(QScreen *screen) {
@@ -789,7 +790,7 @@ index 69f6778..3a3a829 100644
  }
  
  ShijimaManager::~ShijimaManager() {
-@@ -752,6 +1180,29 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +1181,29 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -819,7 +820,7 @@ index 69f6778..3a3a829 100644
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1240,544 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1241,544 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -1364,7 +1365,7 @@ index 69f6778..3a3a829 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1803,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1804,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -1419,7 +1420,7 @@ index 69f6778..3a3a829 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,9 +1869,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,9 +1870,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -1450,7 +1451,7 @@ index 69f6778..3a3a829 100644
  }
  
  void ShijimaManager::updateEnvironment() {
-@@ -947,6 +1976,24 @@ QWidget *ShijimaManager::mascotParent() {
+@@ -947,6 +1977,24 @@ QWidget *ShijimaManager::mascotParent() {
  }
  
  void ShijimaManager::tick() {
@@ -1475,7 +1476,7 @@ index 69f6778..3a3a829 100644
      if (m_hasTickCallbacks) {
          auto lock = acquireLock();
          for (auto &callback : m_tickCallbacks) {
-@@ -991,7 +2038,11 @@ void ShijimaManager::tick() {
+@@ -991,7 +2039,11 @@ void ShijimaManager::tick() {
      for (auto iter = m_mascots.end(); iter != m_mascots.begin(); ) {
          --iter;
          ShijimaWidget *shimeji = *iter;
@@ -1488,7 +1489,7 @@ index 69f6778..3a3a829 100644
              int mascotId = shimeji->mascotId();
              delete shimeji;
              auto erasePos = iter;
-@@ -1000,9 +2051,17 @@ void ShijimaManager::tick() {
+@@ -1000,9 +2052,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -1507,7 +1508,7 @@ index 69f6778..3a3a829 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1011,6 +2070,14 @@ void ShijimaManager::tick() {
+@@ -1011,6 +2071,14 @@ void ShijimaManager::tick() {
                  mascot.state->env = m_env[newScreen];
              }
          }
@@ -1522,7 +1523,7 @@ index 69f6778..3a3a829 100644
          if (breedRequest.available) {
              if (breedRequest.name == "") {
                  breedRequest.name = shimeji->mascotName().toStdString();
-@@ -1076,6 +2143,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +2144,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
