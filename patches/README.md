@@ -108,6 +108,23 @@
   重生 HD 素材：Real-ESRGAN ncnn-vulkan 官方 macOS 版（universal），
   `realesrgan-ncnn-vulkan -i img -o out -n realesrgan-x4plus-anime -m models`（記得 `-m`，
   不給會靜默失敗）。
+- 睡覺（2026-07-20 加）：離開（滑鼠閒置）或夜間就寢時段 → 兔兔趴下睡 + Zzz 泡泡；滑鼠一動即醒。
+  - 閒置偵測：`sleepTick()`（掛在主 tick，每格）比對 `QCursor::pos()` 與上格，有動就更新
+    `m_lastCursorMoveMs`（跨平台，程式本來每 tick 就讀游標）。
+  - 睡眠判定：閒置秒數 ≥ 門檻（白天 `sleep/idleSecondsDay` 300、夜間 `sleep/idleSecondsNight` 60）。
+    夜間時段 `sleep/bedtimeStart`(01:00)~`bedtimeEnd`(07:00)，判斷含跨午夜（start>end wrap）。
+    夜間只是換較短門檻，仍「一動就醒」。
+  - ⚠️ 關鍵雷：`LieDown` 動作（Sprawl）只有 **0.5~1.5 秒**就結束→引擎 `_next_behavior()` 自己挑
+    別的行為亂走。所以睡眠中要**每 400ms 高頻補 `next_behavior("LieDown")`**（< 最短 500ms）
+    把兔兔釘在趴姿。原本試「每 5s 補一次」壓不住、兔兔會醒著亂走。
+  - ⚠️ 醒來雷：**不要**強制 `next_behavior("StandUp")`——StandUp（Stand）也是短序列但強制指定
+    會卡住不動十幾秒（不是會自然結束的 top-level 行為）。正解：醒來只停止補 LieDown，
+    當前 LieDown ~1 秒內自然結束，引擎自己挑正常行為起身。
+  - 睡眠中抑制打電腦（Work）與吶喊（shout）指派（`!m_sleeping` gate），免得吵醒/亂動。
+  - Zzz 泡泡 `SleepBubble`：比照 SpeechBubble（translucent/frameless/StaysOnTop、90ms timer
+    跟隨第一隻兔），程式繪製三個 Z 由小到大上浮淡出循環（`WA_TransparentForMouseEvents`）。
+  - 右鍵「😴 想睡就睡」= QSettings `sleep/enabled`（預設開）。測試鉤子 `SHIJIMA_TEST_SLEEP=1`：
+    門檻壓 5 秒、夜間永遠為真。實測用 `CGWarpMouseCursorPosition`(Swift) 移游標驗睡/醒。
 - 繁殖上限（2026-07-17 加）：原始引擎**沒有**數量上限（README 曾誤寫 50），繁殖請求來就生。
   改在 `ShijimaManager::tick` 消化 `breed_request` 前檢查 `m_mascots.size()`，
   額滿（QSettings `mascot/maxCount`，預設 20，0=不限）就把請求丟棄。**手動生成不受限**。

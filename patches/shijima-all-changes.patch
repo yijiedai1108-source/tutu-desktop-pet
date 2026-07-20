@@ -140,7 +140,7 @@ index ad712f5..54194f2 100644
  
  }
 diff --git a/ShijimaContextMenu.cc b/ShijimaContextMenu.cc
-index 2115764..8d203bb 100644
+index 2115764..20c6a92 100644
 --- a/ShijimaContextMenu.cc
 +++ b/ShijimaContextMenu.cc
 @@ -19,14 +19,119 @@
@@ -264,7 +264,7 @@ index 2115764..8d203bb 100644
          std::vector<std::string> behaviors;
          auto &list = parent->m_mascot->initial_behavior_list();
          auto flat = list.flatten_unconditional();
-@@ -35,15 +140,46 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
+@@ -35,15 +140,54 @@ ShijimaContextMenu::ShijimaContextMenu(ShijimaWidget *parent)
                  behaviors.push_back(behavior->name);
              }
          }
@@ -310,14 +310,22 @@ index 2115764..8d203bb 100644
 +        });
 +    }
 +
++    // 睡覺開關（離開/夜間兔兔會趴下睡 + Zzz；關掉＝一直活動不睡）
++    action = addAction(QString::fromUtf8("😴 想睡就睡"));
++    action->setCheckable(true);
++    action->setChecked(ShijimaManager::defaultManager()->sleepEnabled());
++    connect(action, &QAction::triggered, [](bool checked){
++        ShijimaManager::defaultManager()->setSleepEnabled(checked);
++    });
++
      // Show manager
      action = addAction("Show manager");
      connect(action, &QAction::triggered, [](){
 diff --git a/ShijimaManager.cc b/ShijimaManager.cc
-index 69f6778..06e3ab8 100644
+index 69f6778..5161a97 100644
 --- a/ShijimaManager.cc
 +++ b/ShijimaManager.cc
-@@ -17,7 +17,345 @@
+@@ -17,7 +17,409 @@
  // 
  
  #include "ShijimaManager.hpp"
@@ -657,13 +665,77 @@ index 69f6778..06e3ab8 100644
 +        p.drawText(QRectF(0, 2, width(), 36), Qt::AlignCenter, m_text);
 +    }
 +};
++
++// 睡覺 Zzz 泡泡：跟著第一隻睡著的兔兔頭上，三個 Z 由小到大緩緩上浮淡出、循環。
++// 純程式繪製（同人素材不能加幀），比照 SpeechBubble 的視窗屬性與跟隨機制。
++class SleepBubble : public QWidget {
++public:
++    SleepBubble(): QWidget(nullptr) {
++        setAttribute(Qt::WA_TranslucentBackground);
++        setAttribute(Qt::WA_NoSystemBackground);
++        setAttribute(Qt::WA_ShowWithoutActivating);
++        setAttribute(Qt::WA_TransparentForMouseEvents);
++        Qt::WindowFlags flags = Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint
++            | Qt::WindowDoesNotAcceptFocus | Qt::NoDropShadowWindowHint;
++        #if defined(__APPLE__)
++        flags |= Qt::Window;
++        #else
++        flags |= Qt::Tool;
++        #endif
++        setWindowFlags(flags);
++        setFixedSize(64, 64);
++        startTimer(90);
++    }
++protected:
++    int m_phase = 0;
++    void timerEvent(QTimerEvent *) override {
++        if (!isVisible()) {
++            return;
++        }
++        auto &list = ShijimaManager::defaultManager()->mascots();
++        if (list.empty()) {
++            hide();
++            return;
++        }
++        auto w = list.front();
++        // 掛在兔兔頭部右上方
++        move(w->x() + w->width() - 18, w->y() - height() + 20);
++        m_phase = (m_phase + 1) % 60;
++        update();
++    }
++    void paintEvent(QPaintEvent *) override {
++        QPainter p(this);
++        p.setRenderHint(QPainter::Antialiasing);
++        QColor ink(0x8A, 0x7A, 0x6A);
++        // 三個 Z，各自有相位差；隨相位上浮 + 淡出，循環
++        struct Zdef { double baseX, baseY, size; int lag; };
++        const Zdef zs[] = { {6, 40, 13, 0}, {20, 30, 17, 20}, {36, 18, 22, 40} };
++        for (auto &z : zs) {
++            double ph = ((m_phase - z.lag + 60) % 60) / 60.0;   // 0~1 循環
++            double y = z.baseY - ph * 18.0;        // 上浮
++            double alpha = ph < 0.15 ? ph / 0.15   // 淡入
++                         : ph > 0.7 ? (1.0 - ph) / 0.3   // 淡出
++                         : 1.0;
++            if (alpha <= 0.02) { continue; }
++            QColor c = ink;
++            c.setAlphaF(std::min(1.0, std::max(0.0, alpha)));
++            QFont f = font();
++            f.setPixelSize((int)z.size);
++            f.setBold(true);
++            f.setItalic(true);
++            p.setFont(f);
++            p.setPen(c);
++            p.drawText(QPointF(z.baseX, y), "Z");
++        }
++    }
++};
 +}
  #include <cmath>
 +#include <cstdlib>
  #include <exception>
  #include <filesystem>
  #include <iostream>
-@@ -34,6 +372,8 @@
+@@ -34,6 +436,8 @@
  #include <QFile>
  #include <QDesktopServices>
  #include <QScreen>
@@ -672,7 +744,7 @@ index 69f6778..06e3ab8 100644
  #include <QRandomGenerator>
  #include "PlatformWidget.hpp"
  #include "ShijimaLicensesDialog.hpp"
-@@ -617,15 +957,35 @@ void ShijimaManager::screenAdded(QScreen *screen) {
+@@ -617,15 +1021,35 @@ void ShijimaManager::screenAdded(QScreen *screen) {
  }
  
  void ShijimaManager::screenRemoved(QScreen *screen) {
@@ -713,7 +785,7 @@ index 69f6778..06e3ab8 100644
  }
  
  ShijimaManager::~ShijimaManager() {
-@@ -752,6 +1112,26 @@ ShijimaManager::ShijimaManager(QWidget *parent):
+@@ -752,6 +1176,29 @@ ShijimaManager::ShijimaManager(QWidget *parent):
      buildToolbar();
  
      m_httpApi.start("127.0.0.1", 32456);
@@ -737,10 +809,13 @@ index 69f6778..06e3ab8 100644
 +    m_hungerTickTimer = startTimer(5000);
 +    m_puddingBubble = new PuddingBubble();
 +    m_speechBubble = new SpeechBubble();
++    m_sleepBubble = new SleepBubble();
++    m_lastCursorPos = QCursor::pos();
++    m_lastCursorMoveMs = QDateTime::currentMSecsSinceEpoch();
  }
  
  void ShijimaManager::itemDoubleClicked(QListWidgetItem *qItem) {
-@@ -789,6 +1169,462 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
+@@ -789,6 +1236,534 @@ void ShijimaManager::timerEvent(QTimerEvent *event) {
      else if (timerId == m_windowObserverTimer) {
          m_windowObserver.tick();
      }
@@ -990,6 +1065,76 @@ index 69f6778..06e3ab8 100644
 +    }
 +}
 +
++// 睡覺：離開（滑鼠閒置）或夜間就寢時段 → 兔兔趴下睡 + Zzz 泡泡；滑鼠一動即醒。
++// 閒置偵測用「滑鼠有沒有位移」（跨平台，程式本來每 tick 就讀游標）。夜間門檻較短。
++// 測試鉤子 SHIJIMA_TEST_SLEEP=1：門檻壓 5 秒、夜間永遠為真。
++bool ShijimaManager::sleepEnabled() {
++    return m_settings.value("sleep/enabled", true).toBool();
++}
++
++void ShijimaManager::setSleepEnabled(bool enabled) {
++    m_settings.setValue("sleep/enabled", enabled);
++    if (!enabled) {
++        m_sleeping = false;
++        if (m_sleepBubble != nullptr) { m_sleepBubble->hide(); }
++    }
++}
++
++// tick 內每格呼叫：更新滑鼠閒置、切換睡眠狀態、維持睡姿與 Zzz 泡泡。
++void ShijimaManager::sleepTick() {
++    qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
++    QPoint pos = QCursor::pos();
++    if (pos != m_lastCursorPos) {
++        m_lastCursorPos = pos;
++        m_lastCursorMoveMs = nowMs;
++    }
++    bool testMode = qEnvironmentVariableIsSet("SHIJIMA_TEST_SLEEP");
++    bool wantSleep = false;
++    if (sleepEnabled() && !windowedMode() && !m_mascots.empty()
++        && !pomodoroBreakActive())
++    {
++        // 夜間時段（可跨午夜）→ 門檻較短
++        bool night = testMode;
++        if (!night) {
++            QTime start = QTime::fromString(
++                m_settings.value("sleep/bedtimeStart", "01:00").toString(), "HH:mm");
++            QTime end = QTime::fromString(
++                m_settings.value("sleep/bedtimeEnd", "07:00").toString(), "HH:mm");
++            QTime now = QTime::currentTime();
++            if (start.isValid() && end.isValid()) {
++                night = (start <= end) ? (now >= start && now < end)
++                                       : (now >= start || now < end);   // 跨午夜
++            }
++        }
++        int idleSec = testMode ? 5 : m_settings.value(
++            night ? "sleep/idleSecondsNight" : "sleep/idleSecondsDay",
++            night ? 60 : 300).toInt();
++        wantSleep = (nowMs - m_lastCursorMoveMs) >= (qint64)idleSec * 1000;
++    }
++
++    if (wantSleep) {
++        if (!m_sleeping) {
++            m_sleeping = true;
++            if (m_sleepBubble != nullptr) { m_sleepBubble->show(); }
++        }
++        // LieDown（Sprawl）只有 0.5~1.5 秒就結束→引擎會自己挑別的行為亂走，所以要高頻
++        // 補 LieDown 把兔兔釘在趴姿（每 400ms < 最短 500ms，保證不會醒來亂跑）。
++        if (nowMs - m_lastSleepAssertMs >= 400) {
++            m_lastSleepAssertMs = nowMs;
++            for (auto mascot : m_mascots) {
++                try { mascot->mascot().next_behavior("LieDown"); }
++                catch (...) {}
++            }
++        }
++    }
++    else if (m_sleeping) {
++        m_sleeping = false;
++        if (m_sleepBubble != nullptr) { m_sleepBubble->hide(); }
++        // 醒來不強制動作：停止補 LieDown 後，當前 LieDown 約 1 秒內自然結束，
++        // 引擎 _next_behavior() 自己挑正常行為起身走動（強制 StandUp 反而會卡住）。
++    }
++}
++
 +void ShijimaManager::hungerTick() {
 +    m_hungerSeconds += 5.0 * m_hungerScale;
 +    m_settings.setValue("hunger/seconds", m_hungerSeconds);
@@ -1037,6 +1182,8 @@ index 69f6778..06e3ab8 100644
 +            }
 +        }
 +    }
++
++    // （睡眠中維持睡姿改由 sleepTick 高頻補 LieDown，這裡不再處理——LieDown 只 ~1 秒，5s 太慢）
 +
 +    // 下班提醒：跨過下班時間那一刻提醒一次（預設 18:00，QSettings workday/end 可改）
 +    QTime endTime = QTime::fromString(
@@ -1095,7 +1242,7 @@ index 69f6778..06e3ab8 100644
 +    bool workHours = QDate::currentDate().dayOfWeek() <= 5
 +        && workStart.isValid() && endTime.isValid()
 +        && nowTime >= workStart && nowTime < endTime;
-+    if (workHours && !m_mascots.empty()
++    if (!m_sleeping && workHours && !m_mascots.empty()
 +        && QRandomGenerator::global()->bounded(120) == 0)
 +    {
 +        try { m_mascots.front()->mascot().next_behavior("Work"); }
@@ -1108,7 +1255,7 @@ index 69f6778..06e3ab8 100644
 +    if (qEnvironmentVariableIsSet("SHIJIMA_TEST_SHOUT")) {
 +        shoutOdds = 3;
 +    }
-+    if (!m_mascots.empty() && !windowedMode() && !m_puddingBubble->isVisible()
++    if (!m_sleeping && !m_mascots.empty() && !windowedMode() && !m_puddingBubble->isVisible()
 +        && QRandomGenerator::global()->bounded(shoutOdds) == 0)
 +    {
 +        // 叫聲對應：ヤハ→短促「呀哈」、ウラ 系→「哼!嗚啦~呀哈呀哈」、其餘/撒嬌→「哈咿呀哈」
@@ -1203,7 +1350,7 @@ index 69f6778..06e3ab8 100644
  }
  
  void ShijimaManager::updateEnvironment(QScreen *screen) {
-@@ -814,26 +1650,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -814,26 +1789,46 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
          geometry = screen->geometry();
          available = screen->availableGeometry();
      }
@@ -1258,7 +1405,7 @@ index 69f6778..06e3ab8 100644
      if (!windowedMode() && m_currentWindow.available &&
          std::fabs(m_currentWindow.x) > 1 && std::fabs(m_currentWindow.y) > 1)
      {
-@@ -860,9 +1716,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
+@@ -860,9 +1855,29 @@ void ShijimaManager::updateEnvironment(QScreen *screen) {
      int x = cursor.x(), y = cursor.y();
      env->cursor = { (double)x, (double)y, x - env->cursor.x, y - env->cursor.y };
      env->subtick_count = SHIJIMAQT_SUBTICK_COUNT;
@@ -1289,10 +1436,13 @@ index 69f6778..06e3ab8 100644
  }
  
  void ShijimaManager::updateEnvironment() {
-@@ -947,6 +1823,21 @@ QWidget *ShijimaManager::mascotParent() {
+@@ -947,6 +1962,24 @@ QWidget *ShijimaManager::mascotParent() {
  }
  
  void ShijimaManager::tick() {
++    // 睡覺：更新滑鼠閒置、切換睡眠狀態、顯示/收 Zzz 泡泡（每格檢查，醒得即時）。
++    sleepTick();
++
 +    // 番茄鐘休息倒數泡泡：每秒用 say() 換字（泡泡本身會跟著第一隻兔）。
 +    // 每次 say 的存活 1.5 秒 > 更新間隔 1 秒 → 整段休息持續顯示，結束後自然消失。
 +    if (pomodoroBreakActive()) {
@@ -1311,7 +1461,7 @@ index 69f6778..06e3ab8 100644
      if (m_hasTickCallbacks) {
          auto lock = acquireLock();
          for (auto &callback : m_tickCallbacks) {
-@@ -991,7 +1882,11 @@ void ShijimaManager::tick() {
+@@ -991,7 +2024,11 @@ void ShijimaManager::tick() {
      for (auto iter = m_mascots.end(); iter != m_mascots.begin(); ) {
          --iter;
          ShijimaWidget *shimeji = *iter;
@@ -1324,7 +1474,7 @@ index 69f6778..06e3ab8 100644
              int mascotId = shimeji->mascotId();
              delete shimeji;
              auto erasePos = iter;
-@@ -1000,9 +1895,17 @@ void ShijimaManager::tick() {
+@@ -1000,9 +2037,17 @@ void ShijimaManager::tick() {
              m_mascotsById.erase(mascotId);
              continue;
          }
@@ -1343,7 +1493,7 @@ index 69f6778..06e3ab8 100644
          if (mascot.state->dragging && !windowedMode()) {
              auto oldScreen = m_reverseEnv[mascot.state->env.get()];
              auto newScreen = QGuiApplication::screenAt(QPoint {
-@@ -1011,6 +1914,14 @@ void ShijimaManager::tick() {
+@@ -1011,6 +2056,14 @@ void ShijimaManager::tick() {
                  mascot.state->env = m_env[newScreen];
              }
          }
@@ -1358,7 +1508,7 @@ index 69f6778..06e3ab8 100644
          if (breedRequest.available) {
              if (breedRequest.name == "") {
                  breedRequest.name = shimeji->mascotName().toStdString();
-@@ -1076,6 +1987,16 @@ QScreen *ShijimaManager::mascotScreen() {
+@@ -1076,6 +2129,16 @@ QScreen *ShijimaManager::mascotScreen() {
      return screen;
  }
  
@@ -1376,7 +1526,7 @@ index 69f6778..06e3ab8 100644
      QScreen *screen = mascotScreen();
      updateEnvironment(screen);
 diff --git a/ShijimaManager.hpp b/ShijimaManager.hpp
-index 3fc6de4..37e8f5d 100644
+index 3fc6de4..a77cc2d 100644
 --- a/ShijimaManager.hpp
 +++ b/ShijimaManager.hpp
 @@ -20,6 +20,7 @@
@@ -1395,7 +1545,7 @@ index 3fc6de4..37e8f5d 100644
  #include "PlatformWidget.hpp"
  #include "MascotData.hpp"
  #include <set>
-@@ -50,6 +52,13 @@ public:
+@@ -50,6 +52,15 @@ public:
      void updateEnvironment(QScreen *);
      QString const& mascotsPath();
      ShijimaWidget *spawn(std::string const& name);
@@ -1406,10 +1556,12 @@ index 3fc6de4..37e8f5d 100644
 +    void setPomodoroEnabled(bool enabled);
 +    bool pomodoroBreakActive() const;
 +    void skipBreak();
++    bool sleepEnabled();
++    void setSleepEnabled(bool enabled);
      void killAll();
      void killAll(QString const& name);
      void killAllButOne(ShijimaWidget *widget);
-@@ -62,6 +71,19 @@ public:
+@@ -62,6 +73,19 @@ public:
      std::map<int, ShijimaWidget *> const& mascotsById();
      ShijimaWidget *hitTest(QPoint const& screenPos);
      void onTickSync(std::function<void(ShijimaManager *)> callback);
@@ -1429,7 +1581,7 @@ index 3fc6de4..37e8f5d 100644
      ~ShijimaManager();
  protected:
      void timerEvent(QTimerEvent *event) override;
-@@ -96,6 +118,12 @@ private:
+@@ -96,6 +120,13 @@ private:
      std::set<std::string> import(QString const& path) noexcept;
      void importWithDialog(QList<QString> const& paths);
      void tick();
@@ -1437,12 +1589,13 @@ index 3fc6de4..37e8f5d 100644
 +    void triggerCry(bool all);
 +    void startBreak();
 +    void endBreak();
++    void sleepTick();
 +    void notify(QString const& message);
 +    void playVoice(QString const& name);
      QScreen *mascotScreen();
      QColor m_sandboxBackground;
      QAction *m_windowedModeAction;
-@@ -105,6 +133,28 @@ private:
+@@ -105,6 +136,33 @@ private:
      Platform::ActiveWindow m_currentWindow;
      Platform::ActiveWindowObserver m_windowObserver;
      int m_mascotTimer = -1;
@@ -1464,6 +1617,11 @@ index 3fc6de4..37e8f5d 100644
 +    qint64 m_breakUntilMs = 0;
 +    int m_breakSecShown = -1;
 +    QString m_breakPhrase;
++    bool m_sleeping = false;
++    qint64 m_lastCursorMoveMs = 0;
++    qint64 m_lastSleepAssertMs = 0;
++    QPoint m_lastCursorPos;
++    QWidget *m_sleepBubble = nullptr;
 +    int m_craving = 0;
 +    bool m_wasHungry = false;
 +    QTime m_lastTickTime;
