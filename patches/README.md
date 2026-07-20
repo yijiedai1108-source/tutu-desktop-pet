@@ -122,7 +122,13 @@
     當前 LieDown ~1 秒內自然結束，引擎自己挑正常行為起身。
   - 睡眠中抑制打電腦（Work）與吶喊（shout）指派（`!m_sleeping` gate），免得吵醒/亂動。
   - Zzz 泡泡 `SleepBubble`：比照 SpeechBubble（translucent/frameless/StaysOnTop、90ms timer
-    跟隨第一隻兔），程式繪製三個 Z 由小到大上浮淡出循環（`WA_TransparentForMouseEvents`）。
+    跟隨第一隻兔），**白底思考泡泡**（圓角矩形 + 左下兩小圓當尾巴，深色桌布也看得見）+
+    三個 Z 由小到大呼吸式淡入淡出（三角波，因 `<cmath>` 在 namespace 後才 include 不能用 std::cos）。
+  - **閉眼睡姿（2026-07-20 追加，素材包 v5→v6）**：素材本有 `shime18.png`＝閉眼趴睡，但只出現在
+    Bouncing/Tripping 過場、無靜態睡姿行為。在 pack conf 加 `Sleep` 行為 + `Sleep`/`SleepPose`
+    動作（結構照 LieDown/Sprawl，撐住 shime18），睡眠改派 `Sleep`（`flatten_unconditional` 查得到
+    才派，舊包沒有回退開眼 `LieDown`）。behaviors.xml 的 Sleep 設 `Frequency=0 Hidden=true`
+    （不隨機、不進右鍵選單）。
   - 右鍵「😴 想睡就睡」= QSettings `sleep/enabled`（預設開）。測試鉤子 `SHIJIMA_TEST_SLEEP=1`：
     門檻壓 5 秒、夜間永遠為真。實測用 `CGWarpMouseCursorPosition`(Swift) 移游標驗睡/醒。
 - 繁殖上限（2026-07-17 加）：原始引擎**沒有**數量上限（README 曾誤寫 50），繁殖請求來就生。

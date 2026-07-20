@@ -252,6 +252,17 @@
 			</Animation>
 		</Action>
 
+		<!-- 睡覺（閉眼趴睡，shime18）：結構照 Sprawl/LieDown，供程式的睡眠功能指派 -->
+		<Action Name="SleepPose" Type="Stay" BorderType="Floor">
+			<Animation>
+				<Pose Image="/shime18.png" ImageAnchor="64,128" Velocity="0,0" Duration="250" />
+			</Animation>
+		</Action>
+
+		<Action Name="Sleep" Type="Sequence" Loop="false">
+			<ActionReference Name="SleepPose" Duration="${500+Math.random()*1000}" />
+		</Action>
+
 		<Action Name="Creep" Type="Move" BorderType="Floor">
 			<Animation>
 				<Pose Image="/shime20.png" ImageAnchor="64,128" Velocity="0,0" Duration="28" />

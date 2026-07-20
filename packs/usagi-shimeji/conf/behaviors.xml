@@ -64,7 +64,16 @@
 					<BehaviorReference Name="CrawlAlongWorkAreaFloor" Frequency="100" Condition="${mascot.environment.floor.isOn(mascot.anchor)}" />
 				</NextBehavior>
 			</Behavior>
-			
+
+			<!-- 睡覺（閉眼趴睡）：Frequency=0 不隨機觸發、Hidden 不進右鍵選單，只供程式睡眠功能指派。
+			     結構照 LieDown；醒來(程式停止補派)後走 NextBehavior 起身。 -->
+			<Behavior Name="Sleep" Frequency="0" Hidden="true">
+				<NextBehavior Add="false">
+					<BehaviorReference Name="SitDown" Frequency="100" />
+					<BehaviorReference Name="CrawlAlongWorkAreaFloor" Frequency="100" Condition="${mascot.environment.floor.isOn(mascot.anchor)}" />
+				</NextBehavior>
+			</Behavior>
+
 			<Behavior Name="SplitIntoTwo" Frequency="50" Condition="#{mascot.totalCount &lt; 50}" />
 		</Condition>
 
